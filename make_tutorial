@@ -1,8 +1,8 @@
 #!/usr/bin/env zsh
-## ## Summary
+## ## 概要
 ## プログラムソースファイルからMarkdownを作る。
 ##
-## ## Motivations
+## ## 動機
 ## - プログラミング学習時、チュートリアルを行う際にコード内にメモを残したい。
 ## - 以前に[ddoc](https://dlang.org/spec/ddoc.html)や
 ##   [Doxygen](https://www.doxygen.nl)を使っていたが、
@@ -12,17 +12,19 @@
 ##     - Doxygenは高機能であるために同等以上の機能を提供するが、
 ##       文法がやや複雑であり、記述量も多い。
 ##
-## ## Development Environment
-# MacOS 15 / zsh 5.9 (x86_64-apple-darwin24.0)
+## ## 開発環境
+#hide
+##> echo "- MacOS `sw_vers -productVersion`"
+##> echo "- `zsh --version`"
 ##
-## ## License
+## ## ライセンス
 LICENSE='Some rights reserved under MIT License, by garlic-flavor, March 23 2025.'
 
-## ## GitHub Repository
+## ## GitHub リポジトリ
 ## [GitHubリポジトリ](https://github.com/garlic-flavor/MakeTutorial)
 GitHub='https://github.com/garlic-flavor/MakeTutorial'
 
-## ## Goals
+## ## 目標
 ## 1. 元のソースコードとして適格。
 ## 2. 独自の書式をなるべく排し、書きやすく、覚えやすくする。
 ## 3. 処理前のソースコードを見てもまあまあ読める。
@@ -32,8 +34,9 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ## 1. 色々な言語に対応する。
 ## 2. 色々な実行環境に対応する。
 ## 3. 拡張子以外の方法で言語の種類を指定する方法を作る。
+## 4. autotoolを用意する。
 ##
-## ## Description
+## ## 説明
 ## ### 準備
 ## 1. ソースコードのコメントをMarkdown風に書く。
 ## 2. ファイル名の先頭を`01_`の様にして順番指定しておく。
@@ -47,19 +50,20 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ## 4. ファイルベース名のアンダーバーを空白に変えたものを`見出し1`で出力する。
 ## 5. 各言語毎に設定したドキュメント行からドキュメントヘッダ+空白1つを除き、
 ##    Markdownにする。
-## 6. ドキュメント行以外はコード行である。連続したコード行をまとめて
+## 6. ドキュメントヘッダ+'>'の行はシェルスクリプトと見做して実行する。
+## 7. ドキュメント行以外はコード行である。連続したコード行をまとめて
 ##    コードブロックで括り、Markdownとして出力する。
-## 7. 各言語毎に設定した出力行に、3.で出力した内容をコード行として出力する。
-## 8. 全て標準出力に出力する。
+## 8. 各言語毎に設定した出力行に、3.で出力した内容をコード行として出力する。
+## 9. 全て標準出力に出力する。
 ##
-### ### この`README.md`の出力コード
-### ```sh
-### >zsh make_tutorial -oREADME.md make_tutorial
-### ```
-### ___!! この時、make_tutotial を実行可能(statが744)にしない !!___
-###
+## ### この`README.md`の出力コード
+## ```sh
+## >zsh make_tutorial -oREADME.md make_tutorial
+## ```
+## ___!! この時、make_tutotial を実行可能(statが744)にしない !!___
+##
 
-## ## Usage
+## ## 使い方
 USAGE="MakeTutorial: ソースコードからMarkdownを出力する。
 $LICENSE
 GitHub: $GitHub
@@ -78,8 +82,7 @@ GitHub: $GitHub
 * パイプで処理するファイルを渡す。
 >ls *.c | $0
 "
-
-## ## Supported Languages
+## ## 対応言語
 function setLanguageSpec {
   # Tcl
   if   [[ $1 == tcl ]]; then 
@@ -93,20 +96,21 @@ function setLanguageSpec {
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
-  # C Programming Language
-  elif [[ $1 == c ]]; then
+  # C/C++ Programming Language
+  elif [[ $1 == c || $1==cpp ]]; then
     EXT=$1
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
 
   # 未対応ファイルだった。
   else
-    throw "$1は非対応です。"
+   >&2 echo  "$1は非対応です。"
+   exit 1
   fi
 }
 
 
-## ## Details
+## ## 詳細
 ## ### 一つのファイルから標準出力にMarkdownを出力する。
 function processAFile {
   # 第一引数がファイルパス
@@ -174,8 +178,14 @@ function processAFile {
       fi
     # 末尾が「hide」である行は出力しない。
     elif [[ $line == *'hide' ]]; then
+      enterCode
     elif [[ $line == *'hide!' ]]; then
+      enterCode
       ((counter++))
+    # 「##>」で始まる行はシェルでコマンドを実行する。
+    elif [[ $line == $DOC_HEADER'>'* ]]; then
+      leaveCode
+      eval ${=line##*>}
     # ドキュメント行
     elif [[ $line == $DOC_HEADER* ]]; then
       leaveCode
