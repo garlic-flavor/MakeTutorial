@@ -48,7 +48,7 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 
 ### 引数なしで実行した場合の処理の流れ。
 1. 現在のフォルダ以下から、ファイル名が`01_My_First_Program.c`の様な
-   `連続した数字+アンダーバー`で始まるファイル名のものを探す。
+   数字で始まるファイル名のものを探す。
 2. ファイルベース名でソートする。
 3. 実行可能ファイルである場合はshebangを利用して実行し、出力を得る。
 4. ファイルベース名のアンダーバーを空白に変えたものを`見出し1`で出力する。
@@ -103,15 +103,22 @@ function setLanguageSpec {
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
-  # C Programming Language
-  elif [[ $1 == c ]]; then
+  # C/C++ Programming Language
+  elif [[ $1 == c || $1==cpp ]]; then
     EXT=$1
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
 
+  # Fortran
+  elif [[ ${1:l} =~ f\d* ]]; then
+    EXT=fortran
+    DOC_HEADER='!!'
+    OUTPUT_HEADER='!>'
+
   # 未対応ファイルだった。
   else
-    throw "$1は非対応です。"
+   >&2 echo  "$1は非対応です。"
+   exit 1
   fi
 }
 ```
@@ -143,9 +150,11 @@ function processAFile {
   insidecode=false # コードブロックかどうかを格納する。
   emptycount=0 # コードブロック内で保留中の空行の数を格納する。
   firstline= # コードの一行目のシェルスクリプト行が格納される。
+  linenum=0 # 行数
 
   # ファイルの各行に対して
   cat $filepath | {while IFS='' read -r line; do
+    (( linenum++ ))
     # コードブロックに入る。
     function enterCode() {
       if $insidecode; then
@@ -156,7 +165,7 @@ function processAFile {
         echo '```'$EXT
         insidecode=true
         if [[ $firstline ]]; then
-          echo -E $firstline
+          printf '%s\n' "${firstline[@]}"
           firstline=
         fi
       fi
@@ -171,10 +180,18 @@ function processAFile {
     }
 
     # shebangはとばす。
-    if   [[ $line == '#!'* ]]; then
-      firstline=$line
-    elif [[ $line == '//usr/bin/env'* ]]; then
-      firstline=$line
+    if   (( $linenum == 1 )) && [[ $line == '#!'* ]]; then
+      firstline=($line)
+    elif (( $linenum == 1 )) && [[ $line == '//usr/bin/env'* ]]; then
+      firstline=($line)
+    elif (( $linenum == 1 )) && [[ $line == '#if'* ]]; then
+      firstline=($line)
+      {while IFS='' read -r subline; do
+        firstline=($firstline $subline)
+        if [[ $subline == '#endif' ]]; then
+          break
+        fi
+      done}
     # 空行
     elif [[ $line == '' ]]; then
       if $insidecode; then
@@ -244,7 +261,7 @@ shift $((OPTIND - 1))
     # 2桁の数字で始まるファイル名を持つファイルそれぞれに対して
     #   ┏ サブフォルダを再帰検索
     #   ┃              ┏ 数字とアンダーバーで始まるファイルにフィルタ
-    ls -R | grep -E '^\d+_.*' | {while read filepath; do
+    ls -R | grep -E '^\d+.*' | {while read filepath; do
       #          ┏ basename;path に変換
       echo ${filepath:t}';'$filepath
       #      ┏ basename でソート
