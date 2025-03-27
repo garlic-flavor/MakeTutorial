@@ -104,7 +104,7 @@ function setLanguageSpec {
     OUTPUT_HEADER='#>'
 
   # C/C++ Programming Language
-  elif [[ $1 == c || $1==cpp ]]; then
+  elif [[ $1 == c || $1 == cpp ]]; then
     EXT=$1
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
@@ -199,25 +199,30 @@ function processAFile {
       else
         echo
       fi
+    # 処理を終える。
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'eof' ]]; then
+      break
     # 末尾が「hide」である行は出力しない。
-    elif [[ $line == *'hide' ]]; then
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hideshebang' ]]; then
+      firstline=
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide' ]]; then
       enterCode
-    elif [[ $line == *'hide!' ]]; then
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide!' ]]; then
       enterCode
       ((counter++))
     # 「##>」で始まる行はシェルでコマンドを実行する。
-    elif [[ $line == $DOC_HEADER'>'* ]]; then
+    elif [[ ${(MS)line##*[[:graph:]]} == $DOC_HEADER'>'* ]]; then
       leaveCode
       eval ${=line##*>}
     # ドキュメント行
-    elif [[ $line == $DOC_HEADER* ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*} == $DOC_HEADER* ]]; then
       leaveCode
       echo -E ${line:$((${#DOC_HEADER}+1))}
     # 「#>!」があれば出力をとばす。
-    elif [[ $line == *$OUTPUT_HEADER'!' ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER'!' ]]; then
       ((counter++))
     # 「#>」で始まる行にあらかじめ得ておいた出力を挿入する。
-    elif [[ $line == *$OUTPUT_HEADER ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER ]]; then
       enterCode
       echo -n $line
       echo -E $outs[$counter]

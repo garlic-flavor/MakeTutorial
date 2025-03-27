@@ -1,0 +1,398 @@
+#!/usr/bin/env zsh
+## ## __試験実装__
+##
+## ## 概要
+## MarkdownからHTMLを生成する。
+##
+## ## 謝辞
+## - [cmark-gfm](https://github.com/github/cmark-gfm)を使っています。
+##
+
+BACKEND=cmark-gfm
+USAGE=": write this later
+"
+
+function writeHeader {
+  echo "<!DOCTYPE html>
+<html lang=\"ja\">
+  <head>
+    <title>test.html</title>
+    <meta charset=\"utf-8\">
+    <style>
+      h1 {
+        padding-left: 20px;
+        background-color: lightgray;
+      }
+      code:not(pre code) {
+        background-color: lightyellow;
+        padding-left: 5px;
+        padding-right: 5px;
+      }
+      pre:has(code) {
+        border-style: solid;
+        border-width: 1;
+        border-color: gray;
+        background-color: lightyellow;
+        padding: 10px 10px 10px 10px;
+      }
+      .keyword {
+        color: red;
+      }
+      .keyword2 {
+        color: purple;
+      }
+      .comment {
+        color: green;
+      }
+      .string {
+        color: blue;
+      }
+      .variable {
+        color: brown;
+      }
+      .output {
+        padding-left: 5px;
+        border-left: 5px solid darkslategray;
+        color: darkslategray;
+      }
+    </style>
+  </head>
+  <body>"
+}
+
+function writeFooter {
+  echo "
+  </body>
+</html>"
+}
+
+function processSh {
+  local keyword=(if then for while in do done else elif fi function case esac \
+    local )
+  local keyword2=(printf print exit echo read)
+  local c
+  local n
+  local rest
+  local i
+  local nest
+  for ((i=0; i<${#1}; i++)); do
+    c=${1:$i:1}
+    rest=${1:$i}
+    if   [[ $c == "'" || $c == "\"" ]]; then
+      echo -n "<span class=\"string\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if   [[ $n == '\\' ]]; then
+          echo -n $n
+          (( i++ ))
+          echo -n ${1:$i:1}
+        elif [[ $n == $c ]]; then
+          echo -n "$n</span>"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $c == '#' ]]; then
+      echo -n "<span class=\"comment\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if    [[ $n =~ ^$'\n'*$ ]]; then
+          echo -n "</span>$n"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $c == '$' ]]; then
+      echo -n "<span class=\"variable\">$c"
+      nest=0
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if   [[ $n == '{' ]]; then
+          echo -n $n
+          ((nest++))
+        elif [[ $n == '}' ]]; then
+          echo -n $n
+          ((nest--))
+          if (($nest == 0)); then
+            echo -n "</span>"
+            break;
+          fi
+        elif [[ $n =~ "[a-zA-Z0-9_:]" ]]; then
+          echo -n $n;
+        elif (($nest)); then
+          echo -n $n
+        else
+          echo -n "</span>"
+          ((i--))
+          break
+        fi
+      done
+    elif [[ $rest = '&quot;'* ]]; then
+      echo -n "<span class=\"string\">&quot;"
+      for ((i+=6; i<${#1}; i++)); do
+        rest=${1:$i}
+        if   [[ $rest == '\\'* ]]; then
+          echo -n ${1:$i:2}
+          (( i++ ))
+        elif [[ $rest == '&quot;'* ]]; then
+          echo -n "&quot;</span>"
+          (( i+=5 ))
+          break
+        else
+          echo -n ${1:$i:1}
+        fi
+      done
+    elif [[ $rest =~ "^(${(j<|>)keyword})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    elif [[ $rest =~ "^(${(j<|>)keyword2})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword2\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    else
+      echo -n - $c
+    fi
+  done
+}
+
+function processC {
+  local keyword=(if for while do else switch case return const static)
+  local keyword2=(void int double size_t)
+  local c
+  local n
+  local rest
+  local i
+  local nest
+  for ((i=0; i<${#1}; i++)); do
+    c=${1:$i:1}
+    rest=${1:$i}
+    if   [[ $c == "'" || $c == "\"" ]]; then
+      echo -n "<span class=\"string\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if   [[ $n == '\\' ]]; then
+          echo -n $n
+          (( i++ ))
+          echo -n ${1:$i:1}
+        elif [[ $n == $c ]]; then
+          echo -n "$n</span>"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $rest == '//&gt;'* ]]; then
+      echo -n "<span class=\"output\">"
+      for ((i+=6; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if    [[ $n =~ ^$'\n'*$ ]]; then
+          echo -n "</span>$n"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $c == '#' || $rest == '//'* ]]; then
+      echo -n "<span class=\"comment\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if    [[ $n =~ ^$'\n'*$ ]]; then
+          echo -n "</span>$n"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $rest = '&quot;'* ]]; then
+      echo -n "<span class=\"string\">&quot;"
+      for ((i+=6; i<${#1}; i++)); do
+        rest=${1:$i}
+        if   [[ $rest == '\\'* ]]; then
+          echo -n ${1:$i:2}
+          (( i++ ))
+        elif [[ $rest == '&quot;'* ]]; then
+          echo -n "&quot;</span>"
+          (( i+=5 ))
+          break
+        else
+          echo -n ${1:$i:1}
+        fi
+      done
+    elif [[ $rest =~ "^(${(j<|>)keyword})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    elif [[ $rest =~ "^(${(j<|>)keyword2})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword2\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    elif [[ $c =~ "[a-zA-Z0-9_]" ]]; then
+      echo -n - $c
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if [[ $n =~ "[a-zA-Z0-9_]" ]]; then
+          echo -n - $n
+        else
+          ((i--))
+          break
+        fi
+      done
+    else
+      echo -n - $c
+    fi
+  done
+}
+
+function processTcl {
+  local keyword=(set if for while else elseif proc switch global upvar )
+  local keyword2=(puts)
+  local c
+  local n
+  local rest
+  local i
+  for ((i=0; i<${#1}; i++)); do
+    c=${1:$i:1}
+    rest=${1:$i}
+    if   [[ $c == "'" || $c == "\"" ]]; then
+      echo -n "<span class=\"string\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if   [[ $n == '\\' ]]; then
+          echo -n $n
+          (( i++ ))
+          echo -n ${1:$i:1}
+        elif [[ $n == $c ]]; then
+          echo -n "$n</span>"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $rest == '#&gt;'* ]]; then
+      echo -n "<span class=\"output\">"
+      for ((i+=5; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if    [[ $n =~ ^$'\n'*$ ]]; then
+          echo -n "</span>$n"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $c == '#' ]]; then
+      echo -n "<span class=\"comment\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if    [[ $n =~ ^$'\n'*$ ]]; then
+          echo -n "</span>$n"
+          break
+        else
+          echo -n $n
+        fi
+      done
+    elif [[ $c == '$' ]]; then
+      echo -n "<span class=\"variable\">$c"
+      for ((i++; i<${#1}; i++)); do
+        n=${1:$i:1}
+        if [[ $n =~ "[a-zA-Z0-9_:]" ]]; then
+          echo -n $n;
+        else
+          echo -n "</span>"
+          ((i--))
+          break
+        fi
+      done
+    elif [[ $rest = '&quot;'* ]]; then
+      echo -n "<span class=\"string\">&quot;"
+      for ((i+=6; i<${#1}; i++)); do
+        rest=${1:$i}
+        if   [[ $rest == '\\'* ]]; then
+          echo -n ${1:$i:2}
+          (( i++ ))
+        elif [[ $rest == '&quot;'* ]]; then
+          echo -n "&quot;</span>"
+          (( i+=5 ))
+          break
+        else
+          echo -n ${1:$i:1}
+        fi
+      done
+    elif [[ $rest =~ "^(${(j<|>)keyword})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    elif [[ $rest =~ "^(${(j<|>)keyword2})[[:>:]]" ]]; then
+      echo -n "<span class=\"keyword2\">$match[1]</span>"
+      (( i += ${#match[1]} - 1 ))
+    else
+      echo -n - $c
+    fi
+  done
+}
+
+function writeHTML {
+  writeHeader
+  local rest=$1
+  local language=
+  local tag=
+  while [[ -n $rest ]]; do
+    if   [[ $rest =~ '^([^<]+)(.+)' ]]; then
+      rest=$match[2]
+      if   [[ $language == language-sh ]]; then
+        processSh $match[1];
+      elif [[ $language == language-c || $language == language-cpp ]]; then
+        processC $match[1];
+      elif [[ $language == language-tcl ]]; then
+        processTcl $match[1];
+      else
+        echo -n -E $match[1]
+      fi
+    elif [[ $rest =~ '^<([^>]+)>(.+)' ]]; then
+      tag=$match[1]
+      rest=$match[2]
+      echo -n "<$tag>"
+      if   [[ $tag == /code ]]; then
+        language=
+      elif [[ $tag =~ "^code[[:space:]]*class=[\'\"]([^\'\"]+)[\'\"]" ]]; then
+        language=$match[1]
+      fi
+    else
+      echo $rest
+      break
+    fi
+  done
+  writeFooter
+}
+
+## ### オプションのパース
+# 出力先 1 は標準出力
+output=1
+# オプションをパースする。
+while getopts o:b:h OPT; do
+  case $OPT in
+    o) output=$OPTARG;;
+    b) BACKEND=$OPTARG;;
+    h) print $USAGE; exit;;
+    *) print $USAGE; exit 1;;
+  esac
+done
+shift $((OPTIND - 1))
+
+# stdin がターミナル(= パイプに接続されていない)。
+{if [ -t 0 ]; then
+  # 引数がある場合
+  if [[ $1 ]]; then
+    writeHTML "$(${=BACKEND} $1)"
+  else
+    print $USAGE
+    exit 1
+  fi
+# stdin がパイプに接続されている。
+else
+  # パイプを処理する。
+  buf=
+  cat | ${=BACKEND} | {while IFS='' read -r line; do
+    buf="$buf
+$line"
+  done}
+  writeHTML $buf
+fi} >&$output
+

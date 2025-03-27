@@ -1,4 +1,5 @@
 #!/usr/bin/env zsh
+#hideshebang
 ## ## 概要
 ## プログラムソースファイルからMarkdownを作る。
 ##
@@ -13,7 +14,6 @@
 ##       文法がやや複雑であり、記述量も多い。
 ##
 ## ## 開発環境
-#hide
 ##> echo "- MacOS `sw_vers -productVersion`"
 ##> echo "- `zsh --version`"
 ##
@@ -120,10 +120,10 @@ function setLanguageSpec {
 ## ### 一つのファイルから標準出力にMarkdownを出力する。
 function processAFile {
   # 第一引数がファイルパス
-  filepath=$1
+  local filepath=$1
 
   # 実行可能なファイルの場合は実行する。
-  outs=()
+  local outs=()
   if [[ -x $filepath ]]; then
     #          ┏ 絶対パスを得る。
     ${filepath:a} | { while IFS='' read -r line; do
@@ -139,11 +139,11 @@ function processAFile {
   # 言語用設定
   setLanguageSpec $filepath:t:e
 
-  counter=1 # 出力の何行目かを格納する。
-  insidecode=false # コードブロックかどうかを格納する。
-  emptycount=0 # コードブロック内で保留中の空行の数を格納する。
-  firstline= # コードの一行目のシェルスクリプト行が格納される。
-  linenum=0 # 行数
+  local counter=1 # 出力の何行目かを格納する。
+  local insidecode=false # コードブロックかどうかを格納する。
+  local emptycount=0 # コードブロック内で保留中の空行の数を格納する。
+  local firstline= # コードの一行目のシェルスクリプト行が格納される。
+  local linenum=0 # 行数
 
   # ファイルの各行に対して
   cat $filepath | {while IFS='' read -r line; do
@@ -192,27 +192,30 @@ function processAFile {
       else
         echo
       fi
+    # 処理を終える。
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'eof' ]]; then
+      break
     # 末尾が「hide」である行は出力しない。
-    elif [[ $line == *'hideshebang' ]]; then
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hideshebang' ]]; then
       firstline=
-    elif [[ $line == *'hide' ]]; then
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide' ]]; then
       enterCode
-    elif [[ $line == *'hide!' ]]; then
+    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide!' ]]; then
       enterCode
       ((counter++))
     # 「##>」で始まる行はシェルでコマンドを実行する。
-    elif [[ $line == $DOC_HEADER'>'* ]]; then
+    elif [[ ${(MS)line##*[[:graph:]]} == $DOC_HEADER'>'* ]]; then
       leaveCode
       eval ${=line##*>}
     # ドキュメント行
-    elif [[ $line == $DOC_HEADER* ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*} == $DOC_HEADER* ]]; then
       leaveCode
       echo -E ${line:$((${#DOC_HEADER}+1))}
     # 「#>!」があれば出力をとばす。
-    elif [[ $line == *$OUTPUT_HEADER'!' ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER'!' ]]; then
       ((counter++))
     # 「#>」で始まる行にあらかじめ得ておいた出力を挿入する。
-    elif [[ $line == *$OUTPUT_HEADER ]]; then
+    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER ]]; then
       enterCode
       echo -n $line
       echo -E $outs[$counter]
@@ -232,7 +235,7 @@ function processAFile {
 # 出力先 1 は標準出力
 output=1
 # オプションをパースする。
-while getopts o:h OPT; do
+while getopts o:t:h OPT; do
   case $OPT in
     o) output=$OPTARG;;
     h) print $USAGE; exit;;
