@@ -13,10 +13,6 @@
 ##     - Doxygenは高機能であるために同等以上の機能を提供するが、
 ##       文法がやや複雑であり、記述量も多い。
 ##
-## ## 開発環境
-##> echo "- MacOS `sw_vers -productVersion`"
-##> echo "- `zsh --version`"
-##
 ## ## ライセンス
 LICENSE='Some rights reserved under MIT License, by garlic-flavor, March 23 2025.'
 
@@ -35,6 +31,10 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ## 2. 色々な実行環境に対応する。
 ## 3. 拡張子以外の方法で言語の種類を指定する方法を作る。
 ## 4. autotoolを用意する。
+##
+## ## 開発環境
+##> echo "- MacOS `sw_vers -productVersion`"
+##> echo "- `zsh --version`"
 ##
 ## ## 説明
 ## ### 準備
