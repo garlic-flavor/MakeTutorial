@@ -12,13 +12,6 @@
     - Doxygenは高機能であるために同等以上の機能を提供するが、
       文法がやや複雑であり、記述量も多い。
 
-## 開発環境
-```sh
-#!/usr/bin/env zsh
-```
-- MacOS 15.3.2
-- zsh 5.9 (x86_64-apple-darwin24.0)
-
 ## ライセンス
 ```sh
 LICENSE='Some rights reserved under MIT License, by garlic-flavor, March 23 2025.'
@@ -39,6 +32,10 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 2. 色々な実行環境に対応する。
 3. 拡張子以外の方法で言語の種類を指定する方法を作る。
 4. autotoolを用意する。
+
+## 開発環境
+- MacOS 15.3.2
+- zsh 5.9 (x86_64-apple-darwin24.0)
 
 ## 説明
 ### 準備
@@ -66,6 +63,13 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ```
 ___!! この時、make_tutotial を実行可能(statが744)にしない !!___
 
+### おまけ
+MarkdownをHTMLにする。
+[make_md2html](./README_make_md2html.html)
+
+```sh
+>zsh make_tutorial make_tutorial | zsh make_md2html -oREADME.html
+```
 
 ## 使い方
 ```sh
@@ -127,10 +131,10 @@ function setLanguageSpec {
 ```sh
 function processAFile {
   # 第一引数がファイルパス
-  filepath=$1
+  local filepath=$1
 
   # 実行可能なファイルの場合は実行する。
-  outs=()
+  local outs=()
   if [[ -x $filepath ]]; then
     #          ┏ 絶対パスを得る。
     ${filepath:a} | { while IFS='' read -r line; do
@@ -146,11 +150,11 @@ function processAFile {
   # 言語用設定
   setLanguageSpec $filepath:t:e
 
-  counter=1 # 出力の何行目かを格納する。
-  insidecode=false # コードブロックかどうかを格納する。
-  emptycount=0 # コードブロック内で保留中の空行の数を格納する。
-  firstline= # コードの一行目のシェルスクリプト行が格納される。
-  linenum=0 # 行数
+  local counter=1 # 出力の何行目かを格納する。
+  local insidecode=false # コードブロックかどうかを格納する。
+  local emptycount=0 # コードブロック内で保留中の空行の数を格納する。
+  local firstline= # コードの一行目のシェルスクリプト行が格納される。
+  local linenum=0 # 行数
 
   # ファイルの各行に対して
   cat $filepath | {while IFS='' read -r line; do
@@ -243,7 +247,7 @@ function processAFile {
 # 出力先 1 は標準出力
 output=1
 # オプションをパースする。
-while getopts o:h OPT; do
+while getopts o:t:h OPT; do
   case $OPT in
     o) output=$OPTARG;;
     h) print $USAGE; exit;;

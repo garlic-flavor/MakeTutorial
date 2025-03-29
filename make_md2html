@@ -7,6 +7,8 @@
 ##
 ## ## 動機
 ## - MacOSでMarkdownを開くデフォルトアプリをXCodeから変えられない。
+## - cmark-gfmの出力はコードのシンタックスハイライトがないので、
+##   そういうものを付ける。
 ## - とりあえずHTML生成に対応しておけば何かいいことがあるかも知れない。
 ##
 ## ## 目標
@@ -14,13 +16,18 @@
 ##
 ## ## 謝辞
 ## - [cmark-gfm](https://github.com/github/cmark-gfm)を使っています。
-BACKEND=cmark-gfm
+BACKEND="cmark-gfm -e table"
 
 ## ## 使い方
 USAGE="MakeMD2HTML: MarkdownからHTMLを生成する。
 
 使い方:
->$0 [-o out.html] [-b cmark-gfm] file
+>$0 [-o out.html] [-b cmark-gfm] file.md
+
+オプション:
+  -o : 出力ファイルを指定する。初期値では標準出力。
+  -b : バックエンドを指定する。初期値は cmark-gfm
+  -h : このヘルプを表示する。
 "
 
 ## ### HTMLヘッダ
@@ -35,6 +42,12 @@ function writeHeader {
       h1 {
         padding-left: 20px;
         background-color: lightgray;
+      }
+      th {
+        border-bottom: 2px solid black;
+      }
+      td {
+        border-bottom: 1px solid lightgray;
       }
       code:not(pre code) {
         background-color: lightyellow;
@@ -64,9 +77,11 @@ function writeHeader {
         color: brown;
       }
       .output {
-        padding-left: 5px;
-        border-left: 5px solid darkslategray;
         color: darkslategray;
+      }
+      .output::before {
+        content: \"▶︎\";
+        font-size: 14pt;
       }
     </style>
   </head>
@@ -80,19 +95,26 @@ function writeFooter {
 </html>"
 }
 
-## ### 各言語で共用する部分
+## ## 各言語で共用する部分
 typeset -g rest # グローバル変数で使いまわしてるので注意
 typeset -g quote # クォートの内部かどうか
 
 ## ### とりあえず一文字処理する。
+## Params:
+## - $1 : 処理する文字数を指定する。
 function processChar {
   local n=$1
   if [[ -z $n ]]; then n=1; fi
   echo -E -n - ${rest:0:$n}
+  #          ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。
   rest=${rest:$n}
 }
 
 ## ### 一行コメントを処理する。
+## Params:
+## - $1 : 一行コメントを開始するパターン。初期値は'#'
+## - $2 : コメントはspan要素で出力される。その際のclassを指定する。
+##        初期値は"comment"
 function processComment {
   local header=$1 class=$2
   if [[ -z $header ]]; then header='#'; fi
@@ -105,10 +127,13 @@ function processComment {
 ## ### エスケープシーケンスを処理する。
 function processEscapeSequence {
   if [[ $rest != "\\"* ]]; then return 1; fi
-  processChar; processChar;
+  processChar 2
 }
 
 ## ### 文字列を開始する。
+## Params:
+## - $1 : クォート文字列。初期値は"'"。
+## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
 function processQuoteOpen {
   local q=$1 class=$2
   if [[ -n $quote ]]; then return 1; fi
@@ -130,6 +155,9 @@ function processQuoteClose {
 }
 
 ## ### 一単語処理する。
+## Params:
+## - $1 : 単語を構成する一文字にマッチする正規表現。
+##        初期値は"[a-zA-Z0-9_]"
 function processWord {
   local r=$1
   if [[ -z $r ]]; then r="[a-zA-Z0-9_]"; fi
@@ -141,6 +169,9 @@ function processWord {
 }
 
 ## ### キーワードを処理する。
+## Params:
+## - $1 : キーワードを"|"で繋いだ文字列。
+## - $2 : キーワードを括るspan要素のclass属性。初期値は"keyword"。
 function processKeywords {
   local keys=$1 class=$2
   if [[ -z $class ]]; then class='keyword'; fi
@@ -151,6 +182,9 @@ function processKeywords {
 }
 
 ## ### $変数参照を処理する。
+## zshの変数の参照の様なものを処理する。
+## Params:
+## - $1 : 処理結果が格納されるspan要素のclass属性。初期値は"variable"。
 function processVariableReference {
   local class=$1 nest=0
   if [[ $rest != '$'* ]]; then return 1; fi
@@ -176,6 +210,9 @@ function processVariableReference {
 }
 
 ## ### 出力行を処理する。
+## Params:
+## - $1 : 出力行の開始パターンを指定する。初期値は"#>"
+## - $2 : 出力行が括られるspan要素のclass属性。初期値は"output"。
 function processOutput {
   local header=$1 class=$2
   if [[ -z $header ]]; then header='#&gt;'; fi
@@ -185,12 +222,35 @@ function processOutput {
   rest=
 }
 
-## ### 個別の言語の処理
+## ## 個別の言語の処理
 
 ## ### Shell Script を処理する。
 function processSh {
   local key1=(function if then elif else fi local while do done for in)
   local key2=(echo print printf return exit)
+  rest=$1
+  while [[ -n $rest ]]; do
+    if [[ -n $quote ]]; then
+      processEscapeSequence || processVariableReference || \
+      processQuoteClose || processChar
+    else
+      processVariableReference || \
+      processOutput || processComment || \
+      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+      processQuoteOpen "\`" || \
+      processKeywords ${(j<|>)key1} || \
+      processKeywords ${(j<|>)key2} 'keyword2' || \
+      processWord || \
+      processChar
+    fi
+  done
+}
+
+## ### Tcl を処理する。
+function processTcl {
+  local key1=(proc if then elseif else for set switch default while upvar \
+    global)
+  local key2=(puts return incr array)
   rest=$1
   while [[ -n $rest ]]; do
     if [[ -n $quote ]]; then
@@ -228,20 +288,19 @@ function processC {
   done
 }
 
-## ### Tcl を処理する。
-function processTcl {
-  local key1=(proc if then elseif else for set switch default while upvar \
-    global)
-  local key2=(puts return incr array)
+## ### Fortran を処理する。
+function processFortran {
+  local key1=(for return if else while switch case use \
+    namespace constexpr noexcept enum class struct end program \
+    module contains function implicit none subroutine data type)
+  local key2=(character allocatable integer real complex dimension)
   rest=$1
   while [[ -n $rest ]]; do
     if [[ -n $quote ]]; then
       processEscapeSequence || processQuoteClose || processChar
     else
-      processVariableReference || \
-      processOutput || processComment || \
+      processOutput '!&gt;' || processComment || processComment '!' || \
       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processQuoteOpen "\`" || \
       processKeywords ${(j<|>)key1} || \
       processKeywords ${(j<|>)key2} 'keyword2' || \
       processWord || \
@@ -250,6 +309,8 @@ function processTcl {
   done
 }
 
+
+
 ## ## HTML Body
 ## cmark-gfmの出力がここに来る。
 function processBody {
@@ -257,13 +318,17 @@ function processBody {
   # タグ以外の平文を処理する。
   function processNonTag {
     if [[ -z $1 ]]; then return; fi
-    # sh だった
+    # sh
     if   [[ $language == language-sh ]]; then
       processSh $1
-    elif [[ $language == language-c || $language == language-cpp ]]; then
-      processC $1
+    # Tcl
     elif [[ $language == language-tcl ]]; then
       processTcl $1
+    # C/C++
+    elif [[ $language == language-c || $language == language-cpp ]]; then
+      processC $1
+    elif [[ $language == language-fortran ]]; then
+      processFortran $1
     else
       echo -E -n $1
     fi

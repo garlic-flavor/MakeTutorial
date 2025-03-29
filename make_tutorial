@@ -62,6 +62,13 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ## ```
 ## ___!! この時、make_tutotial を実行可能(statが744)にしない !!___
 ##
+## ### おまけ
+## MarkdownをHTMLにする。
+## [make_md2html](./README_make_md2html.html)
+##
+## ```sh
+## >zsh make_tutorial make_tutorial | zsh make_md2html -oREADME.html
+## ```
 
 ## ## 使い方
 USAGE="MakeTutorial: ソースコードからMarkdownを出力する。
