@@ -4,13 +4,16 @@
 
 ## 動機
 - プログラミング学習時、チュートリアルを行う際にコード内にメモを残したい。
+- チュートリアル完走と同時に「俺専用チュートリアル」が完成し、
+  再学習時に使える様にしたい。
 - 以前に[ddoc](https://dlang.org/spec/ddoc.html)や
   [Doxygen](https://www.doxygen.nl)を使っていたが、
   これらは目的がドキュメントの生成であるので代替の手段を用意したい。
     - ドキュメントはインターフェイスの説明であるのに対し、
       コードそのものへの注釈の形が望ましい。
     - Doxygenは高機能であるために同等以上の機能を提供するが、
-      文法がやや複雑であり、記述量も多い。
+      文法がやや複雑であり、記述量もやや多く、出力の量も多い。
+- 出力されるMarkdownにプログラムの出力が入っていると読みやすい。
 
 ## ライセンス
 ```sh
@@ -51,11 +54,11 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 4. ファイルベース名のアンダーバーを空白に変えたものを`見出し1`で出力する。
 5. 各言語毎に設定したドキュメント行からドキュメントヘッダ+空白1つを除き、
    Markdownにする。
-6. ドキュメントヘッダ+'>'の行はシェルスクリプトと見做して実行する。
+6. ドキュメントヘッダ+'>'の行はシェルスクリプトと見做して実行し、
+   その出力を得る。
 7. ドキュメント行以外はコード行である。連続したコード行をまとめて
    コードブロックで括り、Markdownとして出力する。
-8. 各言語毎に設定した出力行に、3.で出力した内容をコード行として出力する。
-9. 全て標準出力に出力する。
+8. 各言語毎に設定した出力行に、3.で得た内容を出力する。
 
 ### この`README.md`の出力コード
 ```sh
@@ -77,6 +80,10 @@ USAGE="MakeTutorial: ソースコードからMarkdownを出力する。
 $LICENSE
 GitHub: $GitHub
 
+オプション:
+  -o : 出力ファイルを指定する。
+  -t : ファイルの中身をパイプで渡す際に、タイトルと拡張子を指定する。
+
 書式:
 >$0 [-o targetfile] [file1 file2 ...]
 
@@ -90,6 +97,9 @@ GitHub: $GitHub
 
 * パイプで処理するファイルを渡す。
 >ls *.c | $0
+
+* パイプでファイルの中身を渡す。
+>cat main.c | $0 -t My_Special_Program.c
 "
 ```
 ## 対応言語
@@ -127,9 +137,9 @@ function setLanguageSpec {
 }
 ```
 ## 詳細
-### 一つのファイルから標準出力にMarkdownを出力する。
+### 標準入力からファイルの中身を読み取り、処理する。
 ```sh
-function processAFile {
+function processContents {
   # 第一引数がファイルパス
   local filepath=$1
 
@@ -156,8 +166,8 @@ function processAFile {
   local firstline= # コードの一行目のシェルスクリプト行が格納される。
   local linenum=0 # 行数
 
-  # ファイルの各行に対して
-  cat $filepath | {while IFS='' read -r line; do
+  # 入力の各行に対して
+  while IFS='' read -r line; do
     (( linenum++ ))
     # コードブロックに入る。
     function enterCode() {
@@ -182,74 +192,83 @@ function processAFile {
         insidecode=false
       fi
     }
+   # shebangはとばす。
+   if   (( $linenum == 1 )) && [[ $line == '#!'* ]]; then
+     firstline=($line)
+   elif (( $linenum == 1 )) && [[ $line == '//usr/bin/env'* ]]; then
+     firstline=($line)
+   elif (( $linenum == 1 )) && [[ $line == '#if'* ]]; then
+     firstline=($line)
+     {while IFS='' read -r subline; do
+       firstline=($firstline $subline)
+       if [[ $subline == '#endif' ]]; then
+         break
+       fi
+     done}
+   # 空行
+   elif [[ $line == '' ]]; then
+     if $insidecode; then
+       (( emptycount++ ))
+     else
+       echo
+     fi
+   # 処理を終える。
+   elif [[ ${line:l} =~ 'eof[[:space:]]*$' ]]; then
+     break
+   # 末尾が「hide」である行は出力しない。
+   elif [[ ${line:l} =~ 'hideshebang[[:space:]]*$' ]]; then
+     firstline=
+   elif [[ ${line:l} =~ 'hide[[:space:]]*$' ]]; then
+     enterCode
+   elif [[ ${line:l} =~ 'hide![[:space:]]*$' ]]; then
+     enterCode
+     ((counter++))
+   # 「##>」で始まる行はシェルでコマンドを実行する。
+   elif [[ $line =~ '^[[:space:]]*'$DOC_HEADER'>' ]]; then
+     leaveCode
+     eval ${=line##*>}
+   # ドキュメント行
+   elif [[ $line =~ '^[[:space:]]*'$DOC_HEADER'[[:space:]]?' ]]; then
+     leaveCode
+     echo -E ${line:${#MATCH}}
+   elif [[ $line =~ $OUTPUT_HEADER'![[:space:]]*' ]]; then
+     ((counter++))
+   # 「#>」で終わる行にあらかじめ得ておいた出力を挿入する。
+   elif [[ $line =~ $OUTPUT_HEADER'[[:space:]]*' ]]; then
+     enterCode
+     echo -E -n $line
+     echo -E $outs[$counter]
+     ((counter++))
+   # それ以外はコードブロック
+  else
+    enterCode
+    echo -E $line;
+  fi
+  done
 
-    # shebangはとばす。
-    if   (( $linenum == 1 )) && [[ $line == '#!'* ]]; then
-      firstline=($line)
-    elif (( $linenum == 1 )) && [[ $line == '//usr/bin/env'* ]]; then
-      firstline=($line)
-    elif (( $linenum == 1 )) && [[ $line == '#if'* ]]; then
-      firstline=($line)
-      {while IFS='' read -r subline; do
-        firstline=($firstline $subline)
-        if [[ $subline == '#endif' ]]; then
-          break
-        fi
-      done}
-    # 空行
-    elif [[ $line == '' ]]; then
-      if $insidecode; then
-        (( emptycount++ ))
-      else
-        echo
-      fi
-    # 処理を終える。
-    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'eof' ]]; then
-      break
-    # 末尾が「hide」である行は出力しない。
-    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hideshebang' ]]; then
-      firstline=
-    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide' ]]; then
-      enterCode
-    elif [[ ${${(MS)line##*[[:graph:]]}:l} == *'hide!' ]]; then
-      enterCode
-      ((counter++))
-    # 「##>」で始まる行はシェルでコマンドを実行する。
-    elif [[ ${(MS)line##*[[:graph:]]} == $DOC_HEADER'>'* ]]; then
-      leaveCode
-      eval ${=line##*>}
-    # ドキュメント行
-    elif [[ ${(MS)line##[[:graph:]]*} == $DOC_HEADER* ]]; then
-      leaveCode
-      echo -E ${line:$((${#DOC_HEADER}+1))}
-    # 「#>!」があれば出力をとばす。
-    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER'!' ]]; then
-      ((counter++))
-    # 「#>」で始まる行にあらかじめ得ておいた出力を挿入する。
-    elif [[ ${(MS)line##[[:graph:]]*[[:graph:]]} == $OUTPUT_HEADER ]]; then
-      enterCode
-      echo -n $line
-      echo -E $outs[$counter]
-      ((counter++))
-    # それ以外はコードブロック
-    else
-      enterCode
-      echo -E $line;
-    fi
-  done}
   if $insidecode; then
     echo '```'
   fi
+}
+```
+### 一つのファイルから標準出力にMarkdownを出力する。
+```sh
+function processAFile {
+  # 第一引数がファイルパス
+  local filepath=$1
+  cat $filepath | processContents $filepath
 }
 ```
 ### オプションのパース
 ```sh
 # 出力先 1 は標準出力
 output=1
+title=
 # オプションをパースする。
 while getopts o:t:h OPT; do
   case $OPT in
     o) output=$OPTARG;;
+    t) title=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
   esac
@@ -259,7 +278,7 @@ shift $((OPTIND - 1))
 ### 各ファイルに対して処理を実行する。
 ```sh
 # stdin がターミナル(= パイプに接続されていない)。
-{if [ -t 0 ]; then
+{if   [ -t 0 ]; then
   # 引数がある場合はそれを順に処理する。
   if (( $# )); then
     for aFile in $@; do
@@ -280,6 +299,8 @@ shift $((OPTIND - 1))
     done}
   fi
 # stdin がパイプに接続されている。
+elif [[ -n $title ]]; then
+  processContents $title
 else
   # パイプからファイル名を得る。
   while read line; do

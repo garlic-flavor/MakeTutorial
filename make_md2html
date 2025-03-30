@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # hideShebang
-## ## __試験実装__
+## ## *試験実装*
 ##
 ## ## 概要
 ## MarkdownからHTMLを生成する。
@@ -16,7 +16,7 @@
 ##
 ## ## 謝辞
 ## - [cmark-gfm](https://github.com/github/cmark-gfm)を使っています。
-BACKEND="cmark-gfm -e table"
+BACKEND="cmark-gfm -e table -e autolink"
 
 ## ## 使い方
 USAGE="MakeMD2HTML: MarkdownからHTMLを生成する。
@@ -31,7 +31,7 @@ USAGE="MakeMD2HTML: MarkdownからHTMLを生成する。
 "
 
 ## ### HTMLヘッダ
-## 色を変える場合はここの<style>要素内をいじる。
+## 見た目を変える場合はここの<style>要素内をいじる。
 function writeHeader {
   echo "<!DOCTYPE html>
 <html lang=\"ja\">
@@ -80,8 +80,7 @@ function writeHeader {
         color: darkslategray;
       }
       .output::before {
-        content: \"▶︎\";
-        font-size: 14pt;
+        content: \" ▶︎ \";
       }
     </style>
   </head>
@@ -254,7 +253,8 @@ function processTcl {
   rest=$1
   while [[ -n $rest ]]; do
     if [[ -n $quote ]]; then
-      processEscapeSequence || processQuoteClose || processChar
+      processEscapeSequence || processVariableReference || \
+      processQuoteClose || processChar
     else
       processVariableReference || \
       processOutput || processComment || \
@@ -293,7 +293,8 @@ function processFortran {
   local key1=(for return if else while switch case use \
     namespace constexpr noexcept enum class struct end program \
     module contains function implicit none subroutine data type)
-  local key2=(character allocatable integer real complex dimension)
+  local key2=(character allocatable integer real complex dimension \
+    double precision)
   rest=$1
   while [[ -n $rest ]]; do
     if [[ -n $quote ]]; then

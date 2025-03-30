@@ -45,14 +45,13 @@
         color: darkslategray;
       }
       .output::before {
-        content: "▶︎";
-        font-size: 14pt;
+        content: " ▶︎ ";
       }
     </style>
   </head>
   <body>
 <h1>make md2html</h1>
-<h2><strong>試験実装</strong></h2>
+<h2><em>試験実装</em></h2>
 <h2>概要</h2>
 <p>MarkdownからHTMLを生成する。</p>
 <h2>動機</h2>
@@ -70,7 +69,7 @@
 <ul>
 <li><a href="https://github.com/github/cmark-gfm">cmark-gfm</a>を使っています。</li>
 </ul>
-<pre><code class="language-sh">BACKEND=<span class="string">&quot;cmark-gfm -e table&quot;</span>
+<pre><code class="language-sh">BACKEND=<span class="string">&quot;cmark-gfm -e table -e autolink&quot;</span>
 </code></pre>
 <h2>使い方</h2>
 <pre><code class="language-sh">USAGE=<span class="string">&quot;MakeMD2HTML: MarkdownからHTMLを生成する。
@@ -85,7 +84,7 @@
 &quot;</span>
 </code></pre>
 <h3>HTMLヘッダ</h3>
-<p>色を変える場合はここの<!-- raw HTML omitted -->要素内をいじる。</p>
+<p>見た目を変える場合はここの<!-- raw HTML omitted -->要素内をいじる。</p>
 <pre><code class="language-sh"><span class="keyword">function</span> writeHeader {
   <span class="keyword2">echo</span> <span class="string">&quot;&lt;!DOCTYPE html&gt;
 &lt;html lang=\&quot;ja\&quot;&gt;
@@ -134,8 +133,7 @@
         color: darkslategray;
       }
       .output::before {
-        content: \&quot;▶︎\&quot;;
-        font-size: 14pt;
+        content: \&quot; ▶︎ \&quot;;
       }
     &lt;/style&gt;
   &lt;/head&gt;
@@ -321,7 +319,8 @@ Params:</p>
   rest=<span class="variable">$1</span>
   <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
     <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
-      processEscapeSequence || processQuoteClose || processChar
+      processEscapeSequence || processVariableReference || \
+      processQuoteClose || processChar
     <span class="keyword">else</span>
       processVariableReference || \
       processOutput || processComment || \
@@ -360,7 +359,8 @@ Params:</p>
   <span class="keyword">local</span> key1=(<span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> switch case use \
     namespace constexpr noexcept enum class struct end program \
     module contains <span class="keyword">function</span> implicit none subroutine data type)
-  <span class="keyword">local</span> key2=(character allocatable integer real complex dimension)
+  <span class="keyword">local</span> key2=(character allocatable integer real complex dimension \
+    double precision)
   rest=<span class="variable">$1</span>
   <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
     <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
