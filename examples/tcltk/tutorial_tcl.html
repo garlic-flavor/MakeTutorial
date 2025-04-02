@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <title>test.html</title>
+    <meta charset="utf-8">
+    <style>
+      h1 {
+        padding-left: 20px;
+        background-color: lightgray;
+      }
+      h2 {
+        border-left: 15px solid lightgray;
+        border-bottom: 5px solid lightgray;
+        padding-left: 15px
+      }
+      h3 {
+        border-left: 10px solid lightgray;
+        padding-left: 10px
+      }
+      th {
+        border-bottom: 2px solid black;
+      }
+      td {
+        border-bottom: 1px solid lightgray;
+      }
+      code:not(pre code) {
+        background-color: lightyellow;
+        padding-left: 5px;
+        padding-right: 5px;
+      }
+      pre:has(code) {
+        border-style: solid;
+        border-width: 1;
+        border-color: gray;
+        background-color: lightyellow;
+        padding: 10px 10px 10px 10px;
+      }
+      .keyword {
+        color: red;
+      }
+      .keyword2 {
+        color: purple;
+      }
+      .comment {
+        color: green;
+      }
+      .string {
+        color: blue;
+      }
+      .variable {
+        color: brown;
+      }
+      .output {
+        color: darkslategray;
+      }
+      .output::before {
+        content: " ▶︎ ";
+      }
+
+      div.language-type {
+        color: white;
+        background-color: gray;
+        position: relative;
+        top: -30px;
+        float: right;
+        border-left: 15px solid gray;
+        border-right: 15px solid gray;
+        border-bottom: 5px solid gray;
+      }
+    </style>
+  </head>
+  <body>
+<h1>01 bootstrap</h1>
+<p>AppleScript -&gt; zsh &lt;-&gt; tcl/tk コンボの説明。</p>
+<h2>ストラテジ</h2>
+<ol>
+<li>開発時はZshで起動。</li>
+<li>GUIはcoprocでwish(Tcl/Tk)を起動。</li>
+<li>Tcl&lt;-&gt;Zsh間では標準パイプで通信し、
+Zshで不足な部分はCとか何かで実装する。</li>
+<li>最後にAppleScriptでApp化する。</li>
+</ol>
+<p>このメリットは非同期処理を実装しやすいこと。</p>
+<h2>AppleScriptで起動する。</h2>
+<ul>
+<li>
+<p>AppleScriptでは</p>
+<ol>
+<li>App化</li>
+<li>依存関係の解決(または指摘)。</li>
+<li>Zshの起動</li>
+</ol>
+<p>を行い、機能の実装は速やかにZsh以降で行う。</p>
+</li>
+<li>
+<p>スクリプトエディタで最初の保存時に「アプリケーション」
+を選ぶことでApp化できる。</p>
+</li>
+<li>
+<p><em>アプリアイコンを変更後はスクリプトの保存に失敗する。</em></p>
+</li>
+</ul>
+<h3>依存している機能がインストールされているか調べる。</h3>
+<ul>
+<li>シェルの単独起動では.zshrcやPATHは設定されていない。
+シェルで<code>source /etc/profile</code> を実行するとPATHが設定される。</li>
+<li><code>which</code>はコマンドがないと失敗する。これを利用して依存関係を調べる。</li>
+</ul>
+<pre><code class="language-applescript"><div class="language-type">applescript</div><span class="keyword2">try</span>
+	<span class="keyword">do</span> shell script <span class="string">&quot;source /etc/profile; which wish&quot;</span>
+	<span class="comment">--   ┗ wish がインストールされていなければ失敗する。</span>
+<span class="keyword">on</span> error
+	display dialog <span class="string">&quot;wishが見つかりませんでした。Tcl/Tkをインストールしてください。&quot;</span>
+<span class="comment">--      ┗ メッセージボックスを出す。</span>
+	<span class="keyword2">return</span>
+<span class="keyword">end</span> <span class="keyword2">try</span>
+</code></pre>
+<h3>Zshスクリプトを実行する。</h3>
+<ul>
+<li><code>スクリプトのバンドルフォルダ/Contents/Resources/Scripts</code>にスクリプトを
+保存しておく。</li>
+<li>実行時にPATHの準備とカレントディレクトリの変更をしておく。</li>
+</ul>
+<pre><code class="language-applescript"><div class="language-type">applescript</div><span class="comment">-- PATHを用意し、カレントフオルダを変更してから起動すると開発しやすい。</span>
+<span class="keyword">set</span> wd <span class="keyword">to</span> POSIX path <span class="keyword">of</span> (path <span class="keyword">to</span> resource <span class="string">&quot;Scripts&quot;</span> as text)
+<span class="comment">--  ┗ アプリのバンドル内のResourceフォルダ内の&quot;Scripts&quot;へのパスを</span>
+<span class="comment">--    POSIX形式で得る。</span>
+<span class="comment">--            do shell script で起動されいるのはshなのでzshを明示する。┓</span>
+<span class="comment">-- カレントフォルダを移動しておくと使いやすい。┓                         ┃</span>
+<span class="keyword">do</span> shell script (<span class="string">&quot;source /etc/profile &amp;&amp; cd &quot;</span> &amp; wd &amp; <span class="string">&quot; &amp;&amp; /usr/bin/env zsh ./01_bootstrap.sh&quot;</span>)
+<span class="comment">--     ┃                     ┃                ┗ 文字列の連結</span>
+<span class="comment">--     ┃                     ┗ PATH環境変数の準備</span>
+<span class="comment">--     ┗ /bin/sh を起動する。</span>
+</code></pre>
+<h1>02 Zsh</h1>
+<p>グルーとしてzshを利用する。</p>
+<h2>GUIの起動</h2>
+<pre><code class="language-sh"><div class="language-type">sh</div>coproc TCLLIBPATH=. wish ./03_tcltk.tcl -title サンプル1 -width 640 -height 480
+<span class="comment"># ┃         ┃         ┗ Tkを使うインタプリタ。ターミナルを出さない。</span>
+<span class="comment"># ┃         ┗ Tclのパッケージがあるフォルダの指定</span>
+<span class="comment"># ┗ バックグラウンドで実行し、パイプをpに設定する。</span>
+</code></pre>
+<h2>GUIからの入力の監視</h2>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="comment"># ┏ 読み込みを続ける。</span>
+<span class="comment"># ┃   ┏ IFS='' で空白をそのまま読み込む</span>
+<span class="comment"># ┃   ┃ ┏ 一行読み込む</span>
+<span class="comment"># ┃   ┃ ┃  ┏ -r でエスケープシーケンスをそのまま読み込む</span>
+<span class="comment"># ┃   ┃ ┃  ┃ ┏ 読み込まれた行が格納される変数名</span>
+<span class="comment"># ┃   ┃ ┃  ┃ ┃  ┏ セミコロンを忘れがち</span>
+{<span class="keyword">while</span> read line; <span class="keyword">do</span>
+  <span class="keyword">if</span> [[ <span class="variable">$line</span> =~ <span class="string">&quot;^say:[[:space:]]*(.*)<span class="variable">$</span>&quot;</span> ]]; <span class="keyword">then</span>
+  <span class="comment">#            ┃            ┗ \sに当たる表現。</span>
+  <span class="comment">#            ┗ 正規表現。マッチ全体が$MATCHに、サブマッチが$matchに</span>
+  <span class="comment">#              格納される。</span>
+    say <span class="variable">$match</span>[1] &amp;
+    <span class="comment"># ┃           ┗ 非同期処理</span>
+    <span class="comment"># ┗ 喋るやつ</span>
+  <span class="keyword">else</span>
+    <span class="keyword2">echo</span> <span class="string">&quot;&gt;&gt;&gt; <span class="variable">$line</span>&quot;</span>
+  <span class="keyword">fi</span>
+<span class="keyword">done</span>} &lt;&amp;p
+<span class="comment">#   ┃  ┗ Tkの標準出力から読み込む</span>
+<span class="comment">#   ┗ 忘れがち</span>
+wait
+<span class="comment"># ┗ バックグラウンドジョブの終了待ち。(この例では必要ない)</span>
+<span class="keyword2">echo</span> <span class="string">'***** DONE *****'</span>
+</code></pre>
+<h1>03 tcltk</h1>
+<p>tcl/tkでテストウィンドウを出す。</p>
+<h2>Description</h2>
+<ul>
+<li>インタプリタは<code>tclsh</code>。Tkを使う場合は<code>wish</code></li>
+<li>Tclは文字列ベース。いろんなものが実は文字列。</li>
+<li><code>#</code>で一行コメント。ブロックコメントは存在しない。</li>
+<li>コードの末尾にコメントがある場合は<code>;#</code>セミコロンが必要。</li>
+<li>コードは上から実行され、main関数的なものは存在しない。</li>
+<li><code>&quot;&quot;</code>で括ると置換が発生する。</li>
+<li><code>{}</code>で括ると置換は発生しない。</li>
+<li>括られた文字列には改行を含めることができる。</li>
+<li>空白文字を含まない文字列は括る必要がない。</li>
+<li>全角スペースは空白文字ではない。</li>
+<li>文字は非ASCII、サロゲートペアも一文字と数えられる。</li>
+<li>行末に<code>\</code>を置くと行が継続する。</li>
+<li><code>[]</code>で括ると、中身の評価結果に展開される。</li>
+<li>コマンドライン引数は<code>argv</code>に格納されている。プログラム名は含まれていない。</li>
+</ul>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment">#!/usr/bin/env wish</span>
+<span class="comment">#                ┗ Tk用インタプリタ</span>
+<span class="keyword">package</span> <span class="keyword2">require</span> cmdline
+<span class="comment">#                 ┗ コマンドライン引数をパースする。</span>
+<span class="comment">#                   パースの対象は必ずしもコマンドラインのみに限らない</span>
+<span class="comment">#                   通常の関数の引数も同様にパースが可能</span>
+</code></pre>
+<h3>自前のパッケージを読み込む。</h3>
+<p>パッケージは前段の環境変数<code>TCLLIBPATH</code>にあるフォルダに構成されている
+ものとする。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="keyword">package</span> <span class="keyword2">require</span> miniclock 1.0
+<span class="comment">#                          ┗ 要求するヴァージョン。省略可。</span>
+</code></pre>
+<h3>コマンドライン引数のパース</h3>
+<p>tcl同梱のcmdlineパッケージを使う。
+コマンドライン引数に限定されず、通常の関数の引数のパースにも使える。</p>
+<ul>
+<li>書式 <code>{NAME(.arg|.arg?|arg+) (VALUE) HELP_MESSAGE}</code>
+<ul>
+<li>NAME オプション名。指定する時は<code>-NAME</code>のようにハイフンを一つつける。</li>
+<li>.arg 引数を取ることを示す。</li>
+<li>.arg? 引数はオプション</li>
+<li>.arg+ 引数は複数ある。残りの引数全部か<code>--</code>までを引数にする。</li>
+<li>VALUE 引数の初期値</li>
+<li>HELP_MESSAGE ヘルプメッセージに表示される。</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment"># 前段のZshから与えられた引数をパースする。</span>
+<span class="comment"># ┏ 変数への代入</span>
+<span class="comment"># ┃    ┏ 代入時に変数名に`$`はつけない。</span>
+<span class="comment"># ┃    ┃    ┏ ブロックに見えるが文字列</span>
+<span class="comment"># ┃    ┃    ┃ この中にコメントを書いても文字列と判定される。</span>
+<span class="keyword">set</span> OPTIONS {
+  {title.arg テストウィンドウ タイトルパーに表示する文字列}
+  {width.arg 100 ウィンドウ幅の初期値}
+  {height.arg 100 ウィンドウ高さの初期値}
+  {msg.arg+ {} メッセージ}
+  {verbose 冗長モード}
+}
+<span class="comment">#         ┏ &quot;&quot;で括られた文字列には置換が発生する。</span>
+<span class="comment">#         ┃ 中身の[cmdline::getArgv0]は展開される。</span>
+<span class="keyword">set</span> USAGE <span class="string">&quot; テストウィンドウ
+書式:
+  &gt; [cmdline::getArgv0] -title ウィンドウタイトル&quot;</span>
+<span class="comment">#           ┃     ┗ 関数の呼び出し。()は必要ない。</span>
+<span class="comment">#           ┗ namespaceの指定 $::argv のように書くとグローバル変数</span>
+
+<span class="comment"># ┏ 例外処理 try - trap - finally</span>
+try {
+  <span class="keyword2">array</span> <span class="keyword">set</span> OPTS [cmdline::typedGetoptions argv <span class="variable">$OPTIONS</span> <span class="variable">$USAGE</span>]
+  <span class="comment"># ┃                                       ┗ 参照の仕組みがない為、lvalueを</span>
+  <span class="comment"># ┃                                         とる必要がある場合は名前を指定</span>
+  <span class="comment"># ┃                                         する。</span>
+  <span class="comment"># ┗ 変数へ`Array`として代入する。</span>
+  <span class="comment">#   `Array`は`キー`と`値`が交互に並んだリストのようなもの。</span>
+  <span class="comment">#   $arr(hoge)のようにアクセスできる。</span>
+  <span class="comment">#   関数からArrayを返す場合は`return [array get $arr]`の様に一度リストにする</span>
+  <span class="comment">#   必要があり、注意が必要。</span>
+} trap {CMDLINE USAGE} {msg} {
+  <span class="comment">#          ┗ return の -errorcode 引数の値。後述の予定。</span>
+  <span class="keyword2">puts</span> <span class="variable">$msg</span>
+  <span class="comment"># ┗ 標準出力</span>
+  exit 1
+  <span class="comment">#    ┗ プログラムの終了値</span>
+} finally {
+  <span class="keyword2">puts</span> 引数のパースを完了しました。
+  <span class="comment">#               ┗ 空白文字を含まなけれは&quot;&quot;や{}は必要ない。</span>
+}
+</code></pre>
+<h2>Tk</h2>
+<h3>ウィンドウのレイアウト</h3>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>wm title . <span class="variable">$OPTS</span>(title) ;<span class="comment"># ウィンドウタイトルの変更</span>
+<span class="comment">#        ┗ '.'は最外ウィンドウの名前。</span>
+wm geometry . <span class="variable">$OPTS</span>(width)x<span class="variable">$OPTS</span>(height) ;<span class="comment"># ウィンドウサイズを指定する。</span>
+</code></pre>
+<p>自前のパッケージを呼び出している。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>grid [miniclock create .clock1] -column 0 -row 0 
+<span class="comment"># ┗ コントロールを並べる仕組みには他に pack などがある様だが、</span>
+<span class="comment">#   とりあえず、grid で良い。</span>
+</code></pre>
+<p>ラベルを出す。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment">#            ┏ ラベルの名前</span>
+grid [label .l1 -text {Hello, Tcl/Tk world!} -fg white -bg black \
+  -font {Helvetica -32}] \
+  -column 1 -row 0 -sticky we
+</code></pre>
+<p>テキストボックスを出す。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>grid [text .t1] -column 0 -columnspan 2 -row 1 -sticky nesw
+</code></pre>
+<p>ボタンを出す。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>grid [button .b1 -text 喋るよ! -command button1Clicked] \
+  -column 0 -columnspan 2 -row 2
+
+<span class="keyword">proc</span> button1Clicked {} {
+  tk_messageBox -title 注意 -message 音が出ます。
+  <span class="keyword2">puts</span> <span class="string">&quot;say: [.t1 get 1.0 {end -1c}]&quot;</span>
+  <span class="comment">#                ┗ テキストボックスの内容を得る。</span>
+}
+</code></pre>
+<p>各グリッドを設定する。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>grid columnconfigure . 0 -weight 0
+grid columnconfigure . 1 -weight 1
+grid rowconfigure . 1 -weight 1
+</code></pre>
+<h1>04 package</h1>
+<p>パッケージを使う。</p>
+<h3>pkgIndexを作る。</h3>
+<p>パッケージのファイルができたら<code>pkgIndex</code>を生成する。</p>
+<pre><code class="language-sh"><div class="language-type">sh</div>tclsh
+</code></pre>
+<p>Tclインタプリタで</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div>pkg_mkIndex miniclock
+</code></pre>
+<p>のように<code>miniclock</code>の部分でパッケージのあるフォルダを指定する。
+フォルダ内に<code>pkgIndex</code>が生成される。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment">#!/usr/bin/env tclsh</span>
+<span class="keyword">package</span> <span class="keyword">provide</span> miniclock 1.0
+<span class="comment">#                  ┗ 提供するパッケージ名。</span>
+<span class="comment">#                    フォルダ名と一致させておく。</span>
+</code></pre>
+<p>パッケージで公開するシンボルを指定する。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment">#                   ┏ 名前空間を定義する。</span>
+<span class="keyword">namespace</span> <span class="keyword">eval</span> ::miniclock {
+  <span class="keyword">namespace</span> <span class="keyword">export</span> create
+  <span class="comment">#                  ┗ シンボルを公開する。</span>
+  <span class="keyword">namespace</span> <span class="keyword">ensemble</span> create
+  <span class="comment">#           ┗ いい感じで呼び出せる様にする。</span>
+
+}
+</code></pre>
+<p>時計を作成する。</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="comment">#         ┏ 名前空間を指定する。</span>
+<span class="keyword">proc</span> ::miniclock::create {name} {
+
+  <span class="keyword">set</span> clockVar <span class="string">&quot;miniclock.variable<span class="variable">$name</span>&quot;</span>
+  <span class="keyword">global</span> <span class="variable">$clockVar</span>
+  <span class="comment">#         ┗ 新しい名前でグローバル変数を定義している。</span>
+
+  after idle <span class="string">&quot;tick <span class="variable">$clockVar</span>&quot;</span>
+  <span class="comment">#       ┗ アイドル時間に第二引数を評価する。</span>
+
+  <span class="keyword">set</span> <span class="variable">$clockVar</span> {00:00}
+  <span class="keyword2">return</span> [label <span class="variable">$name</span> -textvariable <span class="variable">$clockVar</span> -font {monospace -12}]
+  <span class="comment">#         ┃               ┗ ラベルで表示する内容を格納する変数名を指定する。</span>
+  <span class="comment">#         ┃                 この変数に代入するとラベルも変更される。</span>
+  <span class="comment">#         ┗ ラベルを出す。</span>
+}
+</code></pre>
+<p>時計の更新関数</p>
+<pre><code class="language-tcl"><div class="language-type">tcl</div><span class="keyword">proc</span> tick {varName} {
+  <span class="keyword">global</span> <span class="variable">$varName</span>
+
+  <span class="keyword">set</span> systemTime [clock seconds]
+  <span class="comment">#                 ┗ 現在のUNIX時間を得る。</span>
+  <span class="keyword">set</span> msec [expr {[clock milliseconds] % 1000}]
+  <span class="comment">#                   ┗ 現在時刻を高解像度で得ている。</span>
+  <span class="comment">#                     clock format と互換性がないので注意。</span>
+
+  <span class="keyword">if</span> {<span class="variable">$msec</span> &lt; 500} {
+    <span class="keyword">set</span> fmt <span class="string">&quot;%H %M&quot;</span>
+    <span class="keyword">set</span> nxt [expr {500-<span class="variable">$msec</span>}]
+  } <span class="keyword">else</span> {
+    <span class="keyword">set</span> fmt <span class="string">&quot;%H:%M&quot;</span>
+    <span class="keyword">set</span> nxt [expr {1000-<span class="variable">$msec</span>}]
+  }
+  <span class="keyword">set</span> <span class="variable">$varName</span> [clock format <span class="variable">$systemTime</span> -format <span class="variable">$fmt</span>]
+  <span class="comment">#                  ┗ 秒数を指定形式に変換する。</span>
+  after <span class="variable">$nxt</span> <span class="string">&quot;tick <span class="variable">$varName</span>&quot;</span>
+  <span class="comment"># ┗ 第一引数ミリ秒後に第二引数を評価する。</span>
+}
+</code></pre>
+
+  </body>
+</html>

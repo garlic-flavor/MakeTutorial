@@ -43,6 +43,15 @@ function writeHeader {
         padding-left: 20px;
         background-color: lightgray;
       }
+      h2 {
+        border-left: 15px solid lightgray;
+        border-bottom: 5px solid lightgray;
+        padding-left: 15px
+      }
+      h3 {
+        border-left: 10px solid lightgray;
+        padding-left: 10px
+      }
       th {
         border-bottom: 2px solid black;
       }
@@ -81,6 +90,17 @@ function writeHeader {
       }
       .output::before {
         content: \" ▶︎ \";
+      }
+
+      div.language-type {
+        color: white;
+        background-color: gray;
+        position: relative;
+        top: -30px;
+        float: right;
+        border-left: 15px solid gray;
+        border-right: 15px solid gray;
+        border-bottom: 5px solid gray;
       }
     </style>
   </head>
@@ -202,6 +222,9 @@ function processVariableReference {
         ((nest++))
       fi
     done
+  elif [[ $rest == '&quot;'* ]]; then
+    echo -E -n "</span>"
+    return 1;
   else
     processWord "[a-zA-Z0-9_:]" || processChar
   fi
@@ -248,8 +271,8 @@ function processSh {
 ## ### Tcl を処理する。
 function processTcl {
   local key1=(proc if then elseif else for set switch default while upvar \
-    global)
-  local key2=(puts return incr array)
+    global package namespace eval provide export ensemble)
+  local key2=(puts return incr array require)
   rest=$1
   while [[ -n $rest ]]; do
     if [[ -n $quote ]]; then
@@ -267,6 +290,26 @@ function processTcl {
     fi
   done
 }
+
+## ### AppleScript を処理する。
+function processAppleScript {
+  local key1=(on end do set to of)
+  local key2=(try return)
+  rest=$1
+  while [[ -n $rest ]]; do
+    if [[ -n $quote ]]; then
+      processQuoteClose || processChar
+    else
+      processComment '--' || \
+      processQuoteOpen '&quot;' || \
+      processKeywords ${(j<|>)key1} || \
+      processKeywords ${(j<|>)key2} 'keyword2' || \
+      processWord || \
+      processChar
+    fi
+  done
+}
+
 
 ## ### C/C++ を処理する。
 function processC {
@@ -320,16 +363,18 @@ function processBody {
   function processNonTag {
     if [[ -z $1 ]]; then return; fi
     # sh
-    if   [[ $language == language-sh ]]; then
+    if   [[ $language == sh ]]; then
       processSh $1
     # Tcl
-    elif [[ $language == language-tcl ]]; then
+    elif [[ $language == tcl ]]; then
       processTcl $1
     # C/C++
-    elif [[ $language == language-c || $language == language-cpp ]]; then
+    elif [[ $language == c || $language == language-cpp ]]; then
       processC $1
-    elif [[ $language == language-fortran ]]; then
+    elif [[ $language == fortran ]]; then
       processFortran $1
+    elif [[ $language == applescript ]]; then
+      processAppleScript $1
     else
       echo -E -n $1
     fi
@@ -339,8 +384,9 @@ function processBody {
     if [[ -z $1 ]]; then return; fi
     echo -E -n $1
     # code要素が来たらclass属性をlanguageに格納する。
-    if [[ $1 =~ "^<code[[:space:]]+class[[:space:]]*=[[:space:]]*\"([^\"]*)\"[[:space:]]*>$" ]]; then
+    if [[ $1 =~ "^<code[[:space:]]+class[[:space:]]*=[[:space:]]*\"language-([^\"]*)\"[[:space:]]*>$" ]]; then
       language=$match[1]
+      echo -E -n "<div class=\"language-type\">$language</div>";
     # /codeタグが来たらlanguageを終わる。
     elif [[ $1 =~ "^</code[[:space:]]*>$" ]]; then
       language=

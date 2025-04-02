@@ -37,7 +37,7 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 4. autotoolを用意する。
 
 ## 開発環境
-- MacOS 15.3.2
+- MacOS 15.4
 - zsh 5.9 (x86_64-apple-darwin24.0)
 
 ## 説明
@@ -289,7 +289,7 @@ shift $((OPTIND - 1))
     # 2桁の数字で始まるファイル名を持つファイルそれぞれに対して
     #   ┏ サブフォルダを再帰検索
     #   ┃              ┏ 数字とアンダーバーで始まるファイルにフィルタ
-    ls -R | grep -E '^\d+.*' | {while read filepath; do
+    find `pwd` | grep -E '/\d+[^/]+$' | {while read filepath; do
       #          ┏ basename;path に変換
       echo ${filepath:t}';'$filepath
       #      ┏ basename でソート
