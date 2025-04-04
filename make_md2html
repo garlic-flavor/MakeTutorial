@@ -369,7 +369,7 @@ function processBody {
     elif [[ $language == tcl ]]; then
       processTcl $1
     # C/C++
-    elif [[ $language == c || $language == language-cpp ]]; then
+    elif [[ $language == c || $language == cpp ]]; then
       processC $1
     elif [[ $language == fortran ]]; then
       processFortran $1

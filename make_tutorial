@@ -282,7 +282,7 @@ shift $((OPTIND - 1))
     # 2桁の数字で始まるファイル名を持つファイルそれぞれに対して
     #   ┏ サブフォルダを再帰検索
     #   ┃              ┏ 数字とアンダーバーで始まるファイルにフィルタ
-    find `pwd` | grep -E '/\d+[^/]+$' | {while read filepath; do
+    find `pwd`/* | grep -E '/\d+[^/]+$' | {while read filepath; do
       #          ┏ basename;path に変換
       echo ${filepath:t}';'$filepath
       #      ┏ basename でソート
