@@ -33,10 +33,10 @@ USAGE="MakeMD2HTML: MarkdownからHTMLを生成する。
 ## ### HTMLヘッダ
 ## 見た目を変える場合はここの<style>要素内をいじる。
 function writeHeader {
-  echo "<!DOCTYPE html>
+  print - "<!DOCTYPE html>
 <html lang=\"ja\">
   <head>
-    <title>test.html</title>
+    <title>${output:t:r}</title>
     <meta charset=\"utf-8\">
     <style>
       h1 {
@@ -102,6 +102,13 @@ function writeHeader {
         border-right: 15px solid gray;
         border-bottom: 5px solid gray;
       }
+
+      strong > em {
+        color: red;
+      }
+      em > strong {
+        color: red;
+      }
     </style>
   </head>
   <body>"
@@ -109,7 +116,7 @@ function writeHeader {
 
 ## ### HTMLフッタ
 function writeFooter {
-  echo "
+  print - "
   </body>
 </html>"
 }
@@ -122,10 +129,9 @@ typeset -g quote # クォートの内部かどうか
 ## Params:
 ## - $1 : 処理する文字数を指定する。
 function processChar {
-  local n=$1
-  if [[ -z $n ]]; then n=1; fi
-  echo -E -n - ${rest:0:$n}
-  #          ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。
+  local n=${1:-1}
+  print -rn - ${rest:0:$n}
+  #         ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。
   rest=${rest:$n}
 }
 
@@ -135,11 +141,9 @@ function processChar {
 ## - $2 : コメントはspan要素で出力される。その際のclassを指定する。
 ##        初期値は"comment"
 function processComment {
-  local header=$1 class=$2
-  if [[ -z $header ]]; then header='#'; fi
-  if [[ -z $class ]]; then class='comment'; fi
+  local header=${1:-'#'} class=${2:-comment}
   if [[ $rest != $header* ]]; then return 1; fi
-  echo -E -n "<span class=\"$class\">$rest</span>"
+  print -rn - "<span class=\"$class\">$rest</span>"
   rest=
 }
 
@@ -154,13 +158,11 @@ function processEscapeSequence {
 ## - $1 : クォート文字列。初期値は"'"。
 ## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
 function processQuoteOpen {
-  local q=$1 class=$2
+  local q=${1:-"'"} class=${2:-string}
   if [[ -n $quote ]]; then return 1; fi
-  if [[ -z $q ]]; then q="'"; fi
-  if [[ -z $class ]]; then class="string"; fi
   if [[ $rest != $q* ]]; then return 1; fi
   quote=$q
-  echo -E -n "<span class=\"$class\">"
+  print -rn - "<span class=\"$class\">"
   processChar
 }
 
@@ -169,7 +171,7 @@ function processQuoteClose {
   if [[ -z $quote ]]; then return 1; fi
   if [[ $rest != $quote* ]]; then return 1; fi
   processChar ${#quote}
-  echo -E -n "</span>"
+  print -rn - "</span>"
   quote=
 }
 
@@ -178,8 +180,7 @@ function processQuoteClose {
 ## - $1 : 単語を構成する一文字にマッチする正規表現。
 ##        初期値は"[a-zA-Z0-9_]"
 function processWord {
-  local r=$1
-  if [[ -z $r ]]; then r="[a-zA-Z0-9_]"; fi
+  local r=${1:-'[a-zA-Z0-9_]'}
   if [[ $rest =~ "^$r+" ]]; then
     processChar ${#MATCH}
   else
@@ -192,12 +193,11 @@ function processWord {
 ## - $1 : キーワードを"|"で繋いだ文字列。
 ## - $2 : キーワードを括るspan要素のclass属性。初期値は"keyword"。
 function processKeywords {
-  local keys=$1 class=$2
-  if [[ -z $class ]]; then class='keyword'; fi
+  local keys=$1 class=${2:-keyword}
   if [[ ! $rest =~ "^($keys)[[:>:]]" ]]; then return 1; fi
-  echo -E -n "<span class=\"$class\">"
+  print -rn - "<span class=\"$class\">"
   processChar ${#MATCH}
-  echo -E -n "</span>"
+  print -rn - "</span>"
 }
 
 ## ### $変数参照を処理する。
@@ -205,30 +205,39 @@ function processKeywords {
 ## Params:
 ## - $1 : 処理結果が格納されるspan要素のclass属性。初期値は"variable"。
 function processVariableReference {
-  local class=$1 nest=0
+  local class=${1:-variable} nest=0
   if [[ $rest != '$'* ]]; then return 1; fi
-  if [[ -z $class ]]; then class='variable'; fi
-  echo -E -n "<span class=\"$class\">"
+  print -rn - "<span class=\"$class\">"
   processChar;
-  if [[ $rest == '{'* ]]; then
+  if [[ $rest = '{'* ]]; then
     ((nest++))
     while [[ -n $rest ]]; do
       processChar
       if   (( $nest == 0 )); then
         break
-      elif [[ $rest == '}'* ]]; then
+      elif [[ $rest = '}'* ]]; then
         ((nest--))
-      elif [[ $rest == '{'* ]]; then
+      elif [[ $rest = '{'* ]]; then
         ((nest++))
       fi
     done
-  elif [[ $rest == '&quot;'* ]]; then
-    echo -E -n "</span>"
-    return 1;
+  elif [[ $rest = '('* ]]; then
+    ((nest++))
+    while [[ -n $rest ]]; do
+      processChar
+      if   (( $nest == 0 )); then
+        break;
+      elif [[ $rest = ')'* ]]; then
+        ((nest--))
+      elif [[ $rest = '('* ]]; then
+        ((nest++))
+      fi
+    done
+  elif [[ $rest = '&quot;'* ]]; then
   else
     processWord "[a-zA-Z0-9_:]" || processChar
   fi
-  echo -E -n "</span>"
+  print -rn - "</span>"
 }
 
 ## ### 出力行を処理する。
@@ -236,11 +245,9 @@ function processVariableReference {
 ## - $1 : 出力行の開始パターンを指定する。初期値は"#>"
 ## - $2 : 出力行が括られるspan要素のclass属性。初期値は"output"。
 function processOutput {
-  local header=$1 class=$2
-  if [[ -z $header ]]; then header='#&gt;'; fi
-  if [[ -z $class ]]; then class='output'; fi
+  local header=${1:-'#&gt;'} class=${2:-output}
   if [[ $rest != $header* ]]; then return 1; fi
-  echo -E -n "<span class=\"$class\">${rest:${#header}}</span>"
+  print -rn - "<span class=\"$class\">${rest:${#header}}</span>"
   rest=
 }
 
@@ -248,12 +255,15 @@ function processOutput {
 
 ## ### Shell Script を処理する。
 function processSh {
-  local key1=(function if then elif else fi local while do done for in)
-  local key2=(echo print printf return exit)
-  rest=$1
+  local key1=(function if then elif else fi local while do done for in \
+              case esac)
+  local key2=(echo print printf return exit setopt unsetopt typeset)
+  local rest=$1
   while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
+    if   [[ $quote = '&quot;' ]]; then
       processEscapeSequence || processVariableReference || \
+      processQuoteClose || processChar
+    elif [[ $quote = "'" ]]; then
       processQuoteClose || processChar
     else
       processVariableReference || \
@@ -273,9 +283,9 @@ function processTcl {
   local key1=(proc if then elseif else for set switch default while upvar \
     global package namespace eval provide export ensemble)
   local key2=(puts return incr array require)
-  rest=$1
+  local rest=$1
   while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
+    if [[ $quote = '&quot;' ]]; then
       processEscapeSequence || processVariableReference || \
       processQuoteClose || processChar
     else
@@ -376,24 +386,25 @@ function processBody {
     elif [[ $language == applescript ]]; then
       processAppleScript $1
     else
-      echo -E -n $1
+      print -rn - $1
     fi
   }
   # タグを処理する。
   function processTag {
     if [[ -z $1 ]]; then return; fi
-    echo -E -n $1
+    print -rn - $1
     # code要素が来たらclass属性をlanguageに格納する。
     if [[ $1 =~ "^<code[[:space:]]+class[[:space:]]*=[[:space:]]*\"language-([^\"]*)\"[[:space:]]*>$" ]]; then
       language=$match[1]
-      echo -E -n "<div class=\"language-type\">$language</div>";
+      quote=
+      print -rn - "<div class=\"language-type\">$language</div>";
     # /codeタグが来たらlanguageを終わる。
     elif [[ $1 =~ "^</code[[:space:]]*>$" ]]; then
       language=
     fi
   }
 
-  while IFS='' read -r line; do
+  while IFS= read -r line; do
     rest=$line
     while [[ -n $rest ]]; do
       # タグとそれ以外に分離する。
@@ -408,36 +419,32 @@ function processBody {
 }
 
 ## ### オプションのパース
-# 出力先 1 は標準出力
-output=1
 # オプションをパースする。
 while getopts o:b:h OPT; do
   case $OPT in
-    o) output=$OPTARG;;
+    o) exec > $OPTARG;;
     b) BACKEND=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
   esac
 done
-shift $((OPTIND - 1))
+((1 < OPTIND)) && shift $((OPTIND - 1))
 
 ## ## 出力処理
-{
-  writeHeader
-  # stdin がターミナル(= パイプに接続されていない)。
-  if [ -t 0 ]; then
-    # 引数がある場合
-    if [[ $1 ]]; then
-      ${=BACKEND} $1 | processBody
-    else
-      print $USAGE
-      exit 1
-    fi
-  # stdin がパイプに接続されている。
+writeHeader
+# stdin がターミナル(= パイプに接続されていない)。
+if [ -t 0 ]; then
+  # 引数がある場合
+  if [[ $1 ]]; then
+    ${=BACKEND} $1 | processBody
   else
-    # パイプを処理する。
-    ${=BACKEND} | processBody
+    print $USAGE
+    exit 1
   fi
-  writeFooter
-} >&$output
+# stdin がパイプに接続されている。
+else
+  # パイプを処理する。
+  ${=BACKEND} | processBody
+fi
+writeFooter
 

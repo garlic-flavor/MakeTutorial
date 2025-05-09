@@ -102,32 +102,32 @@ GitHub: $GitHub
 ## ## 対応言語
 function setLanguageSpec {
   # Tcl
-  if   [[ $1 == tcl ]]; then 
+  if   [[ $1 = tcl ]]; then 
     EXT=$1
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
   # Shell script
-  elif [[ $1 == sh || $1 == '' ]]; then
+  elif [[ $1 = sh || -z $1 ]]; then
     EXT=sh
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
   # C/C++ Programming Language
-  elif [[ $1 == c || $1 == cpp ]]; then
+  elif [[ $1 = c(|pp) ]]; then
     EXT=$1
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
 
   # Fortran
-  elif [[ ${1:l} =~ f\d* ]]; then
+  elif [[ ${1:l} = f(|[0-9][0-9]) ]]; then
     EXT=fortran
     DOC_HEADER='!!'
     OUTPUT_HEADER='!>'
 
   # 未対応ファイルだった。
   else
-   >&2 echo  "$1は非対応です。"
+   print - "$1は非対応です。" >&2
    exit 1
   fi
 }
@@ -139,39 +139,41 @@ function processContents {
   local filepath=$1
 
   # 実行可能なファイルの場合は実行する。
-  local outs=()
+  local -a outs
   if [[ -x $filepath ]]; then
     #          ┏ 絶対パスを得る。
-    ${filepath:a} | { while IFS='' read -r line; do
-      outs=($outs $line)
+    ${filepath:a} | { while IFS= read -r line; do
+      outs+=$line
     done}
   fi
 
   # ファイル名を見出しにする。
   # ファイル名から拡張子を除いて、アンダースコアをスペースに置換している。
-  echo -n '# '
-  echo $filepath:t:r | sed s/_/\ /g
+  print - '# '${filepath:t:r} | sed s/_/\ /g
 
   # 言語用設定
-  setLanguageSpec $filepath:t:e
+  setLanguageSpec ${filepath:e}
 
   local counter=1 # 出力の何行目かを格納する。
   local insidecode=false # コードブロックかどうかを格納する。
   local emptycount=0 # コードブロック内で保留中の空行の数を格納する。
-  local firstline= # コードの一行目のシェルスクリプト行が格納される。
+  local -a firstline # コードの一行目のシェルスクリプト行が格納される。
   local linenum=0 # 行数
 
   # 入力の各行に対して
-  while IFS='' read -r line; do
+  while IFS= read -r line; do
+    tline=${${(MS)line##[[:graph:]]*[[:graph:]]}:l}
+    # ┗ 末尾の空白を除き、小文字にしたもの。
+
     (( linenum++ ))
     # コードブロックに入る。
     function enterCode() {
       if $insidecode; then
         for (( i = 0; i<$emptycount; ++i )); do
-          echo
+          print -
         done
       else
-        echo '```'$EXT
+        print - '```'$EXT
         insidecode=true
         if [[ $firstline ]]; then
           printf '%s\n' "${firstline[@]}"
@@ -183,67 +185,71 @@ function processContents {
     # コードブロックを出る。
     function leaveCode() {
       if $insidecode; then
-        echo '```'
+        print - '```'
         insidecode=false
       fi
     }
-   # shebangはとばす。
-   if   (( $linenum == 1 )) && [[ $line == '#!'* ]]; then
-     firstline=($line)
-   elif (( $linenum == 1 )) && [[ $line == '//usr/bin/env'* ]]; then
-     firstline=($line)
-   elif (( $linenum == 1 )) && [[ $line == '#if'* ]]; then
-     firstline=($line)
-     {while IFS='' read -r subline; do
-       firstline=($firstline $subline)
-       if [[ $subline == '#endif' ]]; then
-         break
-       fi
-     done}
-   # 空行
-   elif [[ $line == '' ]]; then
-     if $insidecode; then
-       (( emptycount++ ))
-     else
-       echo
-     fi
-   # 処理を終える。
-   elif [[ ${line:l} =~ 'eof[[:space:]]*$' ]]; then
-     break
-   # 末尾が「hide」である行は出力しない。
-   elif [[ ${line:l} =~ 'hideshebang[[:space:]]*$' ]]; then
-     firstline=
-   elif [[ ${line:l} =~ 'hide[[:space:]]*$' ]]; then
-     enterCode
-   elif [[ ${line:l} =~ 'hide![[:space:]]*$' ]]; then
-     enterCode
-     ((counter++))
-   # 「##>」で始まる行はシェルでコマンドを実行する。
-   elif [[ $line =~ '^[[:space:]]*'$DOC_HEADER'>' ]]; then
-     leaveCode
-     eval ${=line##*>}
-   # ドキュメント行
-   elif [[ $line =~ '^[[:space:]]*'$DOC_HEADER'[[:space:]]?' ]]; then
-     leaveCode
-     echo -E ${line:${#MATCH}}
-   # 「#>!」があれば出力をとばす。
-   elif [[ $line =~ $OUTPUT_HEADER'![[:space:]]*' ]]; then
-     ((counter++))
-   # 「#>」で終わる行にあらかじめ得ておいた出力を挿入する。
-   elif [[ $line =~ $OUTPUT_HEADER'[[:space:]]*' ]]; then
-     enterCode
-     echo -E -n $line
-     echo -E $outs[$counter]
-     ((counter++))
-   # それ以外はコードブロック
-  else
-    enterCode
-    echo -E $line;
-  fi
+
+    # shebangはとばす。
+    if   (( $linenum == 1 )) && [[ $line = '#!'* ]]; then
+      firstline=($line)
+    elif (( $linenum == 1 )) && [[ $line = '//usr/bin/env'* ]]; then
+      firstline=($line)
+    elif (( $linenum == 1 )) && [[ ${line:l} = '#if'* ]]; then
+      firstline=($line)
+      while IFS= read -r subline; do
+        firstline+=$subline
+        if [[ ${subline:l} = '#endif' ]]; then
+          break
+        fi
+      done
+    # 空行
+    elif [[ -z $line ]]; then
+      if $insidecode; then
+        (( emptycount++ ))
+      else
+        print -
+      fi
+    # 処理を終える。
+    elif [[ $tline = eof ]]; then
+      break
+    # 末尾が「hide」である行は出力しない。
+    elif [[ $tline = *hideshebang ]]; then
+      firstline=
+    elif [[ $tline = *hide ]]; then
+      enterCode
+    elif [[ $tline = *hide! ]]; then
+      enterCode
+      ((counter++))
+    # 「##>」で始まる行はシェルでコマンドを実行する。
+    elif [[ $tline = $DOC_HEADER\>* ]]; then
+      leaveCode
+      eval ${line#*$DOC_HEADER\>}
+    # ドキュメント行
+    elif [[ $tline = $DOC_HEADER\ * ]]; then
+      leaveCode
+      print -r - ${line#*$DOC_HEADER\ }
+    elif [[ $tline = $DOC_HEADER* ]]; then
+      leaveCode
+      print -r - ${line#*$DOC_HEADER}
+    # 「#>!」があれば出力をとばす。
+    elif [[ $line = *$OUTPUT_HEADER'!' ]]; then
+      ((counter++))
+    # 「#>」で終わる行にあらかじめ得ておいた出力を挿入する。
+    elif [[ $line = *$OUTPUT_HEADER ]]; then
+      enterCode
+      print -rn - $line
+      print -r - $outs[$counter]
+      ((counter++))
+    # それ以外はコードブロック
+    else
+      enterCode
+      print -r - $line;
+    fi
   done
 
   if $insidecode; then
-    echo '```'
+    print - '```'
   fi
 }
 
@@ -255,23 +261,22 @@ function processAFile {
 }
 
 ## ### オプションのパース
-# 出力先 1 は標準出力
-output=1
 title=
 # オプションをパースする。
 while getopts o:t:h OPT; do
   case $OPT in
-    o) output=$OPTARG;;
+    o) exec >$OPTARG;;
+    #   ┗━━━┻ これ以降をリダイレクト
     t) title=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
   esac
 done
-shift $((OPTIND - 1))
+((1 < OPTIND)) && shift $((OPTIND - 1))
 
 ## ### 各ファイルに対して処理を実行する。
 # stdin がターミナル(= パイプに接続されていない)。
-{if   [ -t 0 ]; then
+if   [[ -t 0 ]]; then
   # 引数がある場合はそれを順に処理する。
   if (( $# )); then
     for aFile in $@; do
@@ -279,10 +284,9 @@ shift $((OPTIND - 1))
     done
   # 引数がない場合は現在のフォルダを検索する。
   else
-    # 2桁の数字で始まるファイル名を持つファイルそれぞれに対して
-    #   ┏ サブフォルダを再帰検索
-    #   ┃              ┏ 数字とアンダーバーで始まるファイルにフィルタ
-    find `pwd`/* | grep -E '/\d+[^/]+$' | {while read filepath; do
+    #       数字で始まるファイル名を持つファイルそれぞれに対して
+    #     ┏ サブフォルダを再帰検索
+    print -l **/<->* | {while read filepath; do
       #          ┏ basename;path に変換
       echo ${filepath:t}';'$filepath
       #      ┏ basename でソート
@@ -291,13 +295,15 @@ shift $((OPTIND - 1))
       processAFile ${filepath##*;}
     done}
   fi
-# stdin がパイプに接続されている。
+# stdin がパイプに接続されていて、
+# titleが指定されている
 elif [[ -n $title ]]; then
   processContents $title
+# titleが指定されていない
 else
   # パイプからファイル名を得る。
   while read line; do
     processAFile $line
   done
-fi} >&$output
+fi
 

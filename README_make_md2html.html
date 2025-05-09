@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
   <head>
-    <title>test.html</title>
+    <title></title>
     <meta charset="utf-8">
     <style>
       h1 {
@@ -67,6 +67,13 @@
         border-right: 15px solid gray;
         border-bottom: 5px solid gray;
       }
+
+      strong > em {
+        color: red;
+      }
+      em > strong {
+        color: red;
+      }
     </style>
   </head>
   <body>
@@ -106,10 +113,10 @@
 <h3>HTMLヘッダ</h3>
 <p>見た目を変える場合はここの<!-- raw HTML omitted -->要素内をいじる。</p>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> writeHeader {
-  <span class="keyword2">echo</span> <span class="string">&quot;&lt;!DOCTYPE html&gt;
+  <span class="keyword2">print</span> - <span class="string">&quot;&lt;!DOCTYPE html&gt;
 &lt;html lang=\&quot;ja\&quot;&gt;
   &lt;head&gt;
-    &lt;title&gt;test.html&lt;/title&gt;
+    &lt;title&gt;<span class="variable">${output:t:r}</span>&lt;/title&gt;
     &lt;meta charset=\&quot;utf-8\&quot;&gt;
     &lt;style&gt;
       h1 {
@@ -175,6 +182,13 @@
         border-right: 15px solid gray;
         border-bottom: 5px solid gray;
       }
+
+      strong &gt; em {
+        color: red;
+      }
+      em &gt; strong {
+        color: red;
+      }
     &lt;/style&gt;
   &lt;/head&gt;
   &lt;body&gt;&quot;</span>
@@ -182,14 +196,14 @@
 </code></pre>
 <h3>HTMLフッタ</h3>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> writeFooter {
-  <span class="keyword2">echo</span> <span class="string">&quot;
+  <span class="keyword2">print</span> - <span class="string">&quot;
   &lt;/body&gt;
 &lt;/html&gt;&quot;</span>
 }
 </code></pre>
 <h2>各言語で共用する部分</h2>
-<pre><code class="language-sh"><div class="language-type">sh</div>typeset -g rest <span class="comment"># グローバル変数で使いまわしてるので注意</span>
-typeset -g quote <span class="comment"># クォートの内部かどうか</span>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword2">typeset</span> -g rest <span class="comment"># グローバル変数で使いまわしてるので注意</span>
+<span class="keyword2">typeset</span> -g quote <span class="comment"># クォートの内部かどうか</span>
 </code></pre>
 <h3>とりあえず一文字処理する。</h3>
 <p>Params:</p>
@@ -197,10 +211,9 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
 <li>$1 : 処理する文字数を指定する。</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processChar {
-  <span class="keyword">local</span> n=<span class="variable">$1</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$n</span> ]]; <span class="keyword">then</span> n=1; <span class="keyword">fi</span>
-  <span class="keyword2">echo</span> -E -n - <span class="variable">${rest:0:$n}</span>
-  <span class="comment">#          ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。</span>
+  <span class="keyword">local</span> n=<span class="variable">${1:-1}</span>
+  <span class="keyword2">print</span> -rn - <span class="variable">${rest:0:$n}</span>
+  <span class="comment">#         ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。</span>
   rest=<span class="variable">${rest:$n}</span>
 }
 </code></pre>
@@ -212,11 +225,9 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
 初期値は&quot;comment&quot;</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processComment {
-  <span class="keyword">local</span> header=<span class="variable">$1</span> class=<span class="variable">$2</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$header</span> ]]; <span class="keyword">then</span> header=<span class="string">'#'</span>; <span class="keyword">fi</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$class</span> ]]; <span class="keyword">then</span> class=<span class="string">'comment'</span>; <span class="keyword">fi</span>
+  <span class="keyword">local</span> header=<span class="variable">${1:-'#'}</span> class=<span class="variable">${2:-comment}</span>
   <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="variable">$header</span>* ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;<span class="variable">$rest</span>&lt;/span&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;<span class="variable">$rest</span>&lt;/span&gt;&quot;</span>
   rest=
 }
 </code></pre>
@@ -233,13 +244,11 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
 <li>$2 : 文字列を括るspan要素のクラス属性を指定する。初期値は&quot;string&quot;。</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processQuoteOpen {
-  <span class="keyword">local</span> q=<span class="variable">$1</span> class=<span class="variable">$2</span>
+  <span class="keyword">local</span> q=<span class="variable">${1:-&quot;'&quot;}</span> class=<span class="variable">${2:-string}</span>
   <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$q</span> ]]; <span class="keyword">then</span> q=<span class="string">&quot;'&quot;</span>; <span class="keyword">fi</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$class</span> ]]; <span class="keyword">then</span> class=<span class="string">&quot;string&quot;</span>; <span class="keyword">fi</span>
   <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="variable">$q</span>* ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
   quote=<span class="variable">$q</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>
   processChar
 }
 </code></pre>
@@ -248,7 +257,7 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
   <span class="keyword">if</span> [[ -z <span class="variable">$quote</span> ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
   <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="variable">$quote</span>* ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
   processChar <span class="variable">${#quote}</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;/span&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;/span&gt;&quot;</span>
   quote=
 }
 </code></pre>
@@ -259,8 +268,7 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
 初期値は&quot;[a-zA-Z0-9_]&quot;</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processWord {
-  <span class="keyword">local</span> r=<span class="variable">$1</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$r</span> ]]; <span class="keyword">then</span> r=<span class="string">&quot;[a-zA-Z0-9_]&quot;</span>; <span class="keyword">fi</span>
+  <span class="keyword">local</span> r=<span class="variable">${1:-'[a-zA-Z0-9_]'}</span>
   <span class="keyword">if</span> [[ <span class="variable">$rest</span> =~ <span class="string">&quot;^<span class="variable">$r</span>+&quot;</span> ]]; <span class="keyword">then</span>
     processChar <span class="variable">${#MATCH}</span>
   <span class="keyword">else</span>
@@ -275,12 +283,11 @@ typeset -g quote <span class="comment"># クォートの内部かどうか</span
 <li>$2 : キーワードを括るspan要素のclass属性。初期値は&quot;keyword&quot;。</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processKeywords {
-  <span class="keyword">local</span> keys=<span class="variable">$1</span> class=<span class="variable">$2</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$class</span> ]]; <span class="keyword">then</span> class=<span class="string">'keyword'</span>; <span class="keyword">fi</span>
+  <span class="keyword">local</span> keys=<span class="variable">$1</span> class=<span class="variable">${2:-keyword}</span>
   <span class="keyword">if</span> [[ ! <span class="variable">$rest</span> =~ <span class="string">&quot;^(<span class="variable">$keys</span>)[[:&gt;:]]&quot;</span> ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>
   processChar <span class="variable">${#MATCH}</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;/span&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;/span&gt;&quot;</span>
 }
 </code></pre>
 <h3>$変数参照を処理する。</h3>
@@ -290,30 +297,39 @@ Params:</p>
 <li>$1 : 処理結果が格納されるspan要素のclass属性。初期値は&quot;variable&quot;。</li>
 </ul>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processVariableReference {
-  <span class="keyword">local</span> class=<span class="variable">$1</span> nest=0
-  <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="string">'<span class="variable">$'</span>* ]]; then return 1; fi
-  if [[ -z <span class="variable">$class</span> ]]; then class='</span>variable<span class="string">'; fi
-  echo -E -n &quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;
+  <span class="keyword">local</span> class=<span class="variable">${1:-variable}</span> nest=0
+  <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="string">'$'</span>* ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>
   processChar;
-  if [[ <span class="variable">$rest</span> == '</span>{<span class="string">'* ]]; then
+  <span class="keyword">if</span> [[ <span class="variable">$rest</span> = <span class="string">'{'</span>* ]]; <span class="keyword">then</span>
     ((nest++))
-    while [[ -n <span class="variable">$rest</span> ]]; do
+    <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
       processChar
-      if   (( <span class="variable">$nest</span> == 0 )); then
+      <span class="keyword">if</span>   (( <span class="variable">$nest</span> == 0 )); <span class="keyword">then</span>
         break
-      elif [[ <span class="variable">$rest</span> == '</span>}<span class="string">'* ]]; then
+      <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">'}'</span>* ]]; <span class="keyword">then</span>
         ((nest--))
-      elif [[ <span class="variable">$rest</span> == '</span>{<span class="string">'* ]]; then
+      <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">'{'</span>* ]]; <span class="keyword">then</span>
         ((nest++))
-      fi
-    done
-  elif [[ <span class="variable">$rest</span> == '</span>&amp;quot;<span class="string">'* ]]; then
-    echo -E -n &quot;&lt;/span&gt;&quot;
-    return 1;
-  else
-    processWord &quot;[a-zA-Z0-9_:]&quot; || processChar
-  fi
-  echo -E -n &quot;&lt;/span&gt;&quot;
+      <span class="keyword">fi</span>
+    <span class="keyword">done</span>
+  <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">'('</span>* ]]; <span class="keyword">then</span>
+    ((nest++))
+    <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
+      processChar
+      <span class="keyword">if</span>   (( <span class="variable">$nest</span> == 0 )); <span class="keyword">then</span>
+        break;
+      <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">')'</span>* ]]; <span class="keyword">then</span>
+        ((nest--))
+      <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">'('</span>* ]]; <span class="keyword">then</span>
+        ((nest++))
+      <span class="keyword">fi</span>
+    <span class="keyword">done</span>
+  <span class="keyword">elif</span> [[ <span class="variable">$rest</span> = <span class="string">'&amp;quot;'</span>* ]]; <span class="keyword">then</span>
+  <span class="keyword">else</span>
+    processWord <span class="string">&quot;[a-zA-Z0-9_:]&quot;</span> || processChar
+  <span class="keyword">fi</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;/span&gt;&quot;</span>
 }
 </code></pre>
 <h3>出力行を処理する。</h3>
@@ -322,24 +338,25 @@ Params:</p>
 <li>$1 : 出力行の開始パターンを指定する。初期値は&quot;#&gt;&quot;</li>
 <li>$2 : 出力行が括られるspan要素のclass属性。初期値は&quot;output&quot;。</li>
 </ul>
-<pre><code class="language-sh"><div class="language-type">sh</div>function processOutput {
-  local header=<span class="variable">$1</span> class=<span class="variable">$2</span>
-  if [[ -z <span class="variable">$header</span> ]]; then header='</span><span class="comment">#&amp;gt;'; fi</span>
-  <span class="keyword">if</span> [[ -z <span class="variable">$class</span> ]]; <span class="keyword">then</span> class=<span class="string">'output'</span>; <span class="keyword">fi</span>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processOutput {
+  <span class="keyword">local</span> header=<span class="variable">${1:-'#&amp;gt;'}</span> class=<span class="variable">${2:-output}</span>
   <span class="keyword">if</span> [[ <span class="variable">$rest</span> != <span class="variable">$header</span>* ]]; <span class="keyword">then</span> <span class="keyword2">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;<span class="variable">${rest:${#header}}</span>&lt;/span&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;<span class="variable">${rest:${#header}}</span>&lt;/span&gt;&quot;</span>
   rest=
 }
 </code></pre>
 <h2>個別の言語の処理</h2>
 <h3>Shell Script を処理する。</h3>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processSh {
-  <span class="keyword">local</span> key1=(<span class="keyword">function</span> <span class="keyword">if</span> <span class="keyword">then</span> <span class="keyword">elif</span> <span class="keyword">else</span> <span class="keyword">fi</span> <span class="keyword">local</span> <span class="keyword">while</span> <span class="keyword">do</span> <span class="keyword">done</span> <span class="keyword">for</span> <span class="keyword">in</span>)
-  <span class="keyword">local</span> key2=(<span class="keyword2">echo</span> <span class="keyword2">print</span> <span class="keyword2">printf</span> <span class="keyword2">return</span> <span class="keyword2">exit</span>)
-  rest=<span class="variable">$1</span>
+  <span class="keyword">local</span> key1=(<span class="keyword">function</span> <span class="keyword">if</span> <span class="keyword">then</span> <span class="keyword">elif</span> <span class="keyword">else</span> <span class="keyword">fi</span> <span class="keyword">local</span> <span class="keyword">while</span> <span class="keyword">do</span> <span class="keyword">done</span> <span class="keyword">for</span> <span class="keyword">in</span> \
+              <span class="keyword">case</span> <span class="keyword">esac</span>)
+  <span class="keyword">local</span> key2=(<span class="keyword2">echo</span> <span class="keyword2">print</span> <span class="keyword2">printf</span> <span class="keyword2">return</span> <span class="keyword2">exit</span> <span class="keyword2">setopt</span> <span class="keyword2">unsetopt</span> <span class="keyword2">typeset</span>)
+  <span class="keyword">local</span> rest=<span class="variable">$1</span>
   <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
-    <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
+    <span class="keyword">if</span>   [[ <span class="variable">$quote</span> = <span class="string">'&amp;quot;'</span> ]]; <span class="keyword">then</span>
       processEscapeSequence || processVariableReference || \
+      processQuoteClose || processChar
+    <span class="keyword">elif</span> [[ <span class="variable">$quote</span> = <span class="string">&quot;'&quot;</span> ]]; <span class="keyword">then</span>
       processQuoteClose || processChar
     <span class="keyword">else</span>
       processVariableReference || \
@@ -359,9 +376,9 @@ Params:</p>
   <span class="keyword">local</span> key1=(proc <span class="keyword">if</span> <span class="keyword">then</span> elseif <span class="keyword">else</span> <span class="keyword">for</span> set switch default <span class="keyword">while</span> upvar \
     global package namespace eval provide export ensemble)
   <span class="keyword">local</span> key2=(puts <span class="keyword2">return</span> incr array require)
-  rest=<span class="variable">$1</span>
+  <span class="keyword">local</span> rest=<span class="variable">$1</span>
   <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
-    <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
+    <span class="keyword">if</span> [[ <span class="variable">$quote</span> = <span class="string">'&amp;quot;'</span> ]]; <span class="keyword">then</span>
       processEscapeSequence || processVariableReference || \
       processQuoteClose || processChar
     <span class="keyword">else</span>
@@ -398,7 +415,7 @@ Params:</p>
 </code></pre>
 <h3>C/C++ を処理する。</h3>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processC {
-  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch case using \
+  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch <span class="keyword">case</span> using \
     namespace constexpr noexcept enum class struct)
   <span class="keyword">local</span> key2=(int void double size_t unsigned auto byte short )
   rest=<span class="variable">$1</span>
@@ -418,7 +435,7 @@ Params:</p>
 </code></pre>
 <h3>Fortran を処理する。</h3>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processFortran {
-  <span class="keyword">local</span> key1=(<span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> switch case use \
+  <span class="keyword">local</span> key1=(<span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> switch <span class="keyword">case</span> use \
     namespace constexpr noexcept enum class struct end program \
     module contains <span class="keyword">function</span> implicit none subroutine data type)
   <span class="keyword">local</span> key2=(character allocatable integer real complex dimension \
@@ -459,24 +476,25 @@ Params:</p>
     <span class="keyword">elif</span> [[ <span class="variable">$language</span> == applescript ]]; <span class="keyword">then</span>
       processAppleScript <span class="variable">$1</span>
     <span class="keyword">else</span>
-      <span class="keyword2">echo</span> -E -n <span class="variable">$1</span>
+      <span class="keyword2">print</span> -rn - <span class="variable">$1</span>
     <span class="keyword">fi</span>
   }
   <span class="comment"># タグを処理する。</span>
   <span class="keyword">function</span> processTag {
     <span class="keyword">if</span> [[ -z <span class="variable">$1</span> ]]; <span class="keyword">then</span> <span class="keyword2">return</span>; <span class="keyword">fi</span>
-    <span class="keyword2">echo</span> -E -n <span class="variable">$1</span>
+    <span class="keyword2">print</span> -rn - <span class="variable">$1</span>
     <span class="comment"># code要素が来たらclass属性をlanguageに格納する。</span>
     <span class="keyword">if</span> [[ <span class="variable">$1</span> =~ <span class="string">&quot;^&lt;code[[:space:]]+class[[:space:]]*=[[:space:]]*\&quot;language-([^\&quot;]*)\&quot;[[:space:]]*&gt;<span class="variable">$</span>&quot;</span> ]]; <span class="keyword">then</span>
       language=<span class="variable">$match</span>[1]
-      <span class="keyword2">echo</span> -E -n <span class="string">&quot;&lt;div class=\&quot;language-type\&quot;&gt;<span class="variable">$language</span>&lt;/div&gt;&quot;</span>;
+      quote=
+      <span class="keyword2">print</span> -rn - <span class="string">&quot;&lt;div class=\&quot;language-type\&quot;&gt;<span class="variable">$language</span>&lt;/div&gt;&quot;</span>;
     <span class="comment"># /codeタグが来たらlanguageを終わる。</span>
     <span class="keyword">elif</span> [[ <span class="variable">$1</span> =~ <span class="string">&quot;^&lt;/code[[:space:]]*&gt;<span class="variable">$</span>&quot;</span> ]]; <span class="keyword">then</span>
       language=
     <span class="keyword">fi</span>
   }
 
-  <span class="keyword">while</span> IFS=<span class="string">''</span> read -r line; <span class="keyword">do</span>
+  <span class="keyword">while</span> IFS= read -r line; <span class="keyword">do</span>
     rest=<span class="variable">$line</span>
     <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
       <span class="comment"># タグとそれ以外に分離する。</span>
@@ -491,38 +509,34 @@ Params:</p>
 }
 </code></pre>
 <h3>オプションのパース</h3>
-<pre><code class="language-sh"><div class="language-type">sh</div><span class="comment"># 出力先 1 は標準出力</span>
-output=1
-<span class="comment"># オプションをパースする。</span>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="comment"># オプションをパースする。</span>
 <span class="keyword">while</span> getopts o:b:h OPT; <span class="keyword">do</span>
-  case <span class="variable">$OPT</span> <span class="keyword">in</span>
-    o) output=<span class="variable">$OPTARG</span>;;
+  <span class="keyword">case</span> <span class="variable">$OPT</span> <span class="keyword">in</span>
+    o) exec &gt; <span class="variable">$OPTARG</span>;;
     b) BACKEND=<span class="variable">$OPTARG</span>;;
     h) <span class="keyword2">print</span> <span class="variable">$USAGE</span>; <span class="keyword2">exit</span>;;
     *) <span class="keyword2">print</span> <span class="variable">$USAGE</span>; <span class="keyword2">exit</span> 1;;
-  esac
+  <span class="keyword">esac</span>
 <span class="keyword">done</span>
-shift <span class="variable">$(</span>(OPTIND - 1))
+((1 &lt; OPTIND)) &amp;&amp; shift <span class="variable">$((OPTIND - 1))</span>
 </code></pre>
 <h2>出力処理</h2>
-<pre><code class="language-sh"><div class="language-type">sh</div>{
-  writeHeader
-  <span class="comment"># stdin がターミナル(= パイプに接続されていない)。</span>
-  <span class="keyword">if</span> [ -t 0 ]; <span class="keyword">then</span>
-    <span class="comment"># 引数がある場合</span>
-    <span class="keyword">if</span> [[ <span class="variable">$1</span> ]]; <span class="keyword">then</span>
-      <span class="variable">${=BACKEND}</span> <span class="variable">$1</span> | processBody
-    <span class="keyword">else</span>
-      <span class="keyword2">print</span> <span class="variable">$USAGE</span>
-      <span class="keyword2">exit</span> 1
-    <span class="keyword">fi</span>
-  <span class="comment"># stdin がパイプに接続されている。</span>
+<pre><code class="language-sh"><div class="language-type">sh</div>writeHeader
+<span class="comment"># stdin がターミナル(= パイプに接続されていない)。</span>
+<span class="keyword">if</span> [ -t 0 ]; <span class="keyword">then</span>
+  <span class="comment"># 引数がある場合</span>
+  <span class="keyword">if</span> [[ <span class="variable">$1</span> ]]; <span class="keyword">then</span>
+    <span class="variable">${=BACKEND}</span> <span class="variable">$1</span> | processBody
   <span class="keyword">else</span>
-    <span class="comment"># パイプを処理する。</span>
-    <span class="variable">${=BACKEND}</span> | processBody
+    <span class="keyword2">print</span> <span class="variable">$USAGE</span>
+    <span class="keyword2">exit</span> 1
   <span class="keyword">fi</span>
-  writeFooter
-} &gt;&amp;<span class="variable">$output</span>
+<span class="comment"># stdin がパイプに接続されている。</span>
+<span class="keyword">else</span>
+  <span class="comment"># パイプを処理する。</span>
+  <span class="variable">${=BACKEND}</span> | processBody
+<span class="keyword">fi</span>
+writeFooter
 </code></pre>
 
   </body>

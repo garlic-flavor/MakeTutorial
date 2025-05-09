@@ -72,7 +72,7 @@ coproc TCLLIBPATH=. wish ./03_tcltk.tcl -title サンプル1 -width 640 -height 
 # ┃   ┃ ┃  ┃ ┏ 読み込まれた行が格納される変数名
 # ┃   ┃ ┃  ┃ ┃  ┏ セミコロンを忘れがち
 {while read line; do
-  if [[ $line =~ "^say:[[:space:]]*(.*)$" ]]; then
+  if [[ $line =~ '^say:[[:space:]]*(.*)$' ]]; then
   #            ┃            ┗ \sに当たる表現。
   #            ┗ 正規表現。マッチ全体が$MATCHに、サブマッチが$matchに
   #              格納される。

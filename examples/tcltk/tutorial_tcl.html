@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
   <head>
-    <title>test.html</title>
+    <title></title>
     <meta charset="utf-8">
     <style>
       h1 {
@@ -66,6 +66,13 @@
         border-left: 15px solid gray;
         border-right: 15px solid gray;
         border-bottom: 5px solid gray;
+      }
+
+      strong > em {
+        color: red;
+      }
+      em > strong {
+        color: red;
       }
     </style>
   </head>
@@ -148,7 +155,7 @@ Zshで不足な部分はCとか何かで実装する。</li>
 <span class="comment"># ┃   ┃ ┃  ┃ ┏ 読み込まれた行が格納される変数名</span>
 <span class="comment"># ┃   ┃ ┃  ┃ ┃  ┏ セミコロンを忘れがち</span>
 {<span class="keyword">while</span> read line; <span class="keyword">do</span>
-  <span class="keyword">if</span> [[ <span class="variable">$line</span> =~ <span class="string">&quot;^say:[[:space:]]*(.*)<span class="variable">$</span>&quot;</span> ]]; <span class="keyword">then</span>
+  <span class="keyword">if</span> [[ <span class="variable">$line</span> =~ <span class="string">'^say:[[:space:]]*(.*)$'</span> ]]; <span class="keyword">then</span>
   <span class="comment">#            ┃            ┗ \sに当たる表現。</span>
   <span class="comment">#            ┗ 正規表現。マッチ全体が$MATCHに、サブマッチが$matchに</span>
   <span class="comment">#              格納される。</span>
