@@ -37,7 +37,7 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 4. autotoolを用意する。
 
 ## 開発環境
-- MacOS 15.4.1
+- MacOS 15.5
 - zsh 5.9 (x86_64-apple-darwin24.0)
 
 ## 説明

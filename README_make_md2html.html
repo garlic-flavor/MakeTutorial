@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
   <head>
-    <title></title>
+    <title>README_make_md2html</title>
     <meta charset="utf-8">
     <style>
       h1 {
@@ -512,7 +512,7 @@ Params:</p>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="comment"># オプションをパースする。</span>
 <span class="keyword">while</span> getopts o:b:h OPT; <span class="keyword">do</span>
   <span class="keyword">case</span> <span class="variable">$OPT</span> <span class="keyword">in</span>
-    o) exec &gt; <span class="variable">$OPTARG</span>;;
+    o) output=<span class="variable">$OPTARG</span>; exec &gt; <span class="variable">$OPTARG</span>;;
     b) BACKEND=<span class="variable">$OPTARG</span>;;
     h) <span class="keyword2">print</span> <span class="variable">$USAGE</span>; <span class="keyword2">exit</span>;;
     *) <span class="keyword2">print</span> <span class="variable">$USAGE</span>; <span class="keyword2">exit</span> 1;;

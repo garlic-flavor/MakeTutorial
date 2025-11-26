@@ -363,6 +363,25 @@ function processFortran {
   done
 }
 
+## ### Lua を処理する。
+function processLua {
+  local key1=(const for return if else while static switch case using \
+    namespace constexpr noexcept enum class struct)
+  local key2=(int void double size_t unsigned auto byte short )
+  rest=$1
+  while [[ -n $rest ]]; do
+    if [[ -n $quote ]]; then
+      processEscapeSequence || processQuoteClose || processChar
+    else
+      processOutput '--&gt;' || processComment '--' || \
+      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+      processKeywords ${(j<|>)key1} || \
+      processKeywords ${(j<|>)key2} 'keyword2' || \
+      processWord || \
+      processChar
+    fi
+  done
+}
 
 
 ## ## HTML Body
@@ -385,6 +404,8 @@ function processBody {
       processFortran $1
     elif [[ $language == applescript ]]; then
       processAppleScript $1
+    elif [[ $language == lua ]]; then
+      processLua $1
     else
       print -rn - $1
     fi
@@ -422,7 +443,7 @@ function processBody {
 # オプションをパースする。
 while getopts o:b:h OPT; do
   case $OPT in
-    o) exec > $OPTARG;;
+    o) output=$OPTARG; exec > $OPTARG;;
     b) BACKEND=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
