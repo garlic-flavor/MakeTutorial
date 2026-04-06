@@ -383,6 +383,25 @@ function processLua {
   done
 }
 
+## ### TypeScript を処理する。
+function processTypeScript {
+  local key1=(const for return if else while static switch case using \
+    namespace constexpr noexcept enum class struct function)
+  local key2=(var let const )
+  rest=$1
+  while [[ -n $rest ]]; do
+    if [[ -n $quote ]]; then
+      processEscapeSequence || processQuoteClose || processChar
+    else
+      processOutput '//&gt;' || processComment || processComment '//' || \
+      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+      processKeywords ${(j<|>)key1} || \
+      processKeywords ${(j<|>)key2} 'keyword2' || \
+      processWord || \
+      processChar
+    fi
+  done
+}
 
 ## ## HTML Body
 ## cmark-gfmの出力がここに来る。
@@ -406,6 +425,8 @@ function processBody {
       processAppleScript $1
     elif [[ $language == lua ]]; then
       processLua $1
+    elif [[ $language == ts ]]; then
+      processTypeScript $1
     else
       print -rn - $1
     fi

@@ -131,6 +131,12 @@ function setLanguageSpec {
     DOC_HEADER='---'
     OUTPUT_HEADER='-->'
 
+  # TypeScript
+  elif [[ $1 = ts ]]; then
+    EXT=ts
+    DOC_HEADER='///'
+    OUTPUT_HEADER='//>'
+
   # 未対応ファイルだった。
   else
    print - "$1は非対応です。" >&2

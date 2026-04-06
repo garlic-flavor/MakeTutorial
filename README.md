@@ -37,7 +37,7 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 4. autotoolを用意する。
 
 ## 開発環境
-- MacOS 15.5
+- MacOS 15.7.5
 - zsh 5.9 (x86_64-apple-darwin24.0)
 
 ## 説明
@@ -129,6 +129,18 @@ function setLanguageSpec {
     DOC_HEADER='!!'
     OUTPUT_HEADER='!>'
 
+  # Lua
+  elif [[ $1 = lua ]]; then
+    EXT=$1
+    DOC_HEADER='---'
+    OUTPUT_HEADER='-->'
+
+  # TypeScript
+  elif [[ $1 = ts ]]; then
+    EXT=ts
+    DOC_HEADER='///'
+    OUTPUT_HEADER='//>'
+
   # 未対応ファイルだった。
   else
    print - "$1は非対応です。" >&2
@@ -145,9 +157,13 @@ function processContents {
 
   # 実行可能なファイルの場合は実行する。
   local -a outs
-  if [[ -x $filepath ]]; then
+  if   [[ -x $filepath ]]; then
     #          ┏ 絶対パスを得る。
     ${filepath:a} | { while IFS= read -r line; do
+      outs+=$line
+    done}
+  elif [[ -n $runsource && -a $filepath ]]; then
+    zsh ${filepath:a} | { while IFS= read -r line; do
       outs+=$line
     done}
   fi
@@ -269,12 +285,14 @@ function processAFile {
 ### オプションのパース
 ```sh
 title=
+runsource=
 # オプションをパースする。
-while getopts o:t:h OPT; do
+while getopts o:t:rh OPT; do
   case $OPT in
     o) exec >$OPTARG;;
     #   ┗━━━┻ これ以降をリダイレクト
     t) title=$OPTARG;;
+    r) runsource=true;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
   esac

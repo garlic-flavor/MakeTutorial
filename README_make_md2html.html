@@ -455,6 +455,46 @@ Params:</p>
   <span class="keyword">done</span>
 }
 </code></pre>
+<h3>Lua を処理する。</h3>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processLua {
+  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch <span class="keyword">case</span> using \
+    namespace constexpr noexcept enum class struct)
+  <span class="keyword">local</span> key2=(int void double size_t unsigned auto byte short )
+  rest=<span class="variable">$1</span>
+  <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
+    <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
+      processEscapeSequence || processQuoteClose || processChar
+    <span class="keyword">else</span>
+      processOutput <span class="string">'--&amp;gt;'</span> || processComment <span class="string">'--'</span> || \
+      processQuoteOpen <span class="string">'&amp;quot;'</span> || processQuoteOpen <span class="string">&quot;'&quot;</span> || \
+      processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
+      processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
+      processWord || \
+      processChar
+    <span class="keyword">fi</span>
+  <span class="keyword">done</span>
+}
+</code></pre>
+<h3>TypeScript を処理する。</h3>
+<pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processTypeScript {
+  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword2">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch <span class="keyword">case</span> using \
+    namespace constexpr noexcept enum class struct <span class="keyword">function</span>)
+  <span class="keyword">local</span> key2=(var let const )
+  rest=<span class="variable">$1</span>
+  <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
+    <span class="keyword">if</span> [[ -n <span class="variable">$quote</span> ]]; <span class="keyword">then</span>
+      processEscapeSequence || processQuoteClose || processChar
+    <span class="keyword">else</span>
+      processOutput <span class="string">'//&amp;gt;'</span> || processComment || processComment <span class="string">'//'</span> || \
+      processQuoteOpen <span class="string">'&amp;quot;'</span> || processQuoteOpen <span class="string">&quot;'&quot;</span> || \
+      processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
+      processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
+      processWord || \
+      processChar
+    <span class="keyword">fi</span>
+  <span class="keyword">done</span>
+}
+</code></pre>
 <h2>HTML Body</h2>
 <p>cmark-gfmの出力がここに来る。</p>
 <pre><code class="language-sh"><div class="language-type">sh</div><span class="keyword">function</span> processBody {
@@ -475,6 +515,10 @@ Params:</p>
       processFortran <span class="variable">$1</span>
     <span class="keyword">elif</span> [[ <span class="variable">$language</span> == applescript ]]; <span class="keyword">then</span>
       processAppleScript <span class="variable">$1</span>
+    <span class="keyword">elif</span> [[ <span class="variable">$language</span> == lua ]]; <span class="keyword">then</span>
+      processLua <span class="variable">$1</span>
+    <span class="keyword">elif</span> [[ <span class="variable">$language</span> == ts ]]; <span class="keyword">then</span>
+      processTypeScript <span class="variable">$1</span>
     <span class="keyword">else</span>
       <span class="keyword2">print</span> -rn - <span class="variable">$1</span>
     <span class="keyword">fi</span>
