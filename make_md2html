@@ -26,9 +26,13 @@ USAGE="MakeMD2HTML: MarkdownからHTMLを生成する。
 
 オプション:
   -o : 出力ファイルを指定する。初期値では標準出力。
-  -b : バックエンドを指定する。初期値は cmark-gfm
+  -t : HTMLのタイトルを指定する。
+  -b : バックエンドを指定する。初期値は \"$BACKEND\"
   -h : このヘルプを表示する。
 "
+
+typeset -g output
+#            ┗出力ファイル名
 
 ## ### HTMLヘッダ
 ## 見た目を変える場合はここの<style>要素内をいじる。
@@ -38,78 +42,84 @@ function writeHeader {
   <head>
     <title>${output:t:r}</title>
     <meta charset=\"utf-8\">
-    <style>
-      h1 {
-        padding-left: 20px;
-        background-color: lightgray;
-      }
-      h2 {
-        border-left: 15px solid lightgray;
-        border-bottom: 5px solid lightgray;
-        padding-left: 15px
-      }
-      h3 {
-        border-left: 10px solid lightgray;
-        padding-left: 10px
-      }
-      th {
-        border-bottom: 2px solid black;
-      }
-      td {
-        border-bottom: 1px solid lightgray;
-      }
-      code:not(pre code) {
-        background-color: lightyellow;
-        padding-left: 5px;
-        padding-right: 5px;
-      }
-      pre:has(code) {
-        border-style: solid;
-        border-width: 1;
-        border-color: gray;
-        background-color: lightyellow;
-        padding: 10px 10px 10px 10px;
-      }
-      .keyword {
-        color: red;
-      }
-      .keyword2 {
-        color: purple;
-      }
-      .comment {
-        color: green;
-      }
-      .string {
-        color: blue;
-      }
-      .variable {
-        color: brown;
-      }
-      .output {
-        color: darkslategray;
-      }
-      .output::before {
-        content: \" ▶︎ \";
-      }
-
-      div.language-type {
-        color: white;
-        background-color: gray;
-        position: relative;
-        top: -30px;
-        float: right;
-        border-left: 15px solid gray;
-        border-right: 15px solid gray;
-        border-bottom: 5px solid gray;
-      }
-
-      strong > em {
-        color: red;
-      }
-      em > strong {
-        color: red;
-      }
-    </style>
+      <style>
+        h1 {
+          padding-left: 1ch;
+          background-color: lightgray;
+        }
+        h2 {
+          border-left: 15px solid lightgray;
+          border-bottom: 5px solid lightgray;
+          padding-left: 15px
+        }
+        h3 {
+          border-left: 10px solid lightgray;
+          padding-left: 10px
+        }
+        pre:has(code) {
+          border-style: solid;
+          border-width: 3px;
+          border-color: gray;
+          background-color: ivory;
+          padding: 10px 10px 10px 10px;
+        }
+        code:not(pre code) {
+          background-color: ivory;
+          margin-left: 5px;
+          margin-right: 5px;
+          padding-left: 5px;
+          padding-right: 5px;
+          border-left: 3px solid lightgray;
+          border-right: 3px solid lightgray;
+        }
+        div.language-type {
+          color: white;
+          background-color: gray;
+          position: relative;
+          top: calc(-1em - 17px);
+          float: right;
+          border-left: 15px solid gray;
+          border-right: 15px solid gray;
+          border-top: 2px solid gray;
+          border-bottom: 2px solid gray;
+          border-radius: 4px;
+        }
+        .comment {
+          color: green;
+        }
+        .string {
+          color: blue;
+        }
+        .variable {
+          color: brown;
+        }
+        .keyword {
+          color: red;
+        }
+        .keyword2 {
+          color: purple;
+        }
+        .output {
+          display: inline-block;
+          margin-top: 2px;
+          margin-bottom: 2px;
+          color: darkslategray;
+        }
+        .output::before {
+          background-color: darkslategray;
+          color: white;
+          content: \" ▶︎ \";
+          margin-left: 1ch;
+          margin-right: 1ch;
+          border-radius: 5px;
+        }
+        th {
+          border-bottom: 2px solid black;
+        }
+        td {
+          border-bottom: 1px solid lightgray;
+        }
+      </style>
   </head>
   <body>"
 }
@@ -122,349 +132,571 @@ function writeFooter {
 }
 
 ## ## 各言語で共用する部分
-typeset -g rest # グローバル変数で使いまわしてるので注意
-typeset -g quote # クォートの内部かどうか
+typeset -g buf # グローバル変数で使いまわしてるので注意
+               # 未処理の一行を格納する。
+
+## ### バッファが空なら埋める。
+## もしバッファが空なら、改行を出力し、バッファに読み込む。
+## Params:
+## - -n: 改行を挿入しない。
+## Returns:
+## - 読み込めるものがなければ1を返す。
+#------------------------------------------------------------------------------
+function feedBuffer {
+  local opt nonewline
+  while getopts n opt; do
+    case $opt in
+      n) nonewline=true ;;
+      *) :;;
+    esac
+  done
+  (( 1 < OPTIND )) && shift $((OPTIND - 1))
+
+  if [[ -z $buf ]] then
+    if [[ ! $nonewline ]]; then
+      print -
+    fi
+    if ! IFS= read -r buf; then
+      return 1
+    fi
+  fi
+}
 
 ## ### とりあえず一文字処理する。
 ## Params:
 ## - $1 : 処理する文字数を指定する。
+#------------------------------------------------------------------------------
 function processChar {
   local n=${1:-1}
-  print -rn - ${rest:0:$n}
-  #         ┗ echoのオプションをここまでとする。'-'一文字を出力する際に必要。
-  rest=${rest:$n}
+  #         ┗第一引数が無ければ1を代入
+  print -rn - ${buf:0:$n}
+  #         ┗ printのオプションをここまでとする。'-'一文字を出力する際に必要。
+  buf=${buf:$n}
+  #        ┗ $n 文字目より後のスライスを代入
 }
+
+## ### もし先頭が$1なら処理する。
+## Params:
+## - $1 : テストする文字列
+## - $2 : もし真だったら先にこれも出力する。
+#------------------------------------------------------------------------------
+function processIf {
+  if [[ $buf != $1* ]]; then return 1; fi
+  #               ┗後ろに任意の文字が続いていても良い
+  print -rn - $2
+  processChar ${#1}
+}
+
+## ### <span>要素を開始する。
+#------------------------------------------------------------------------------
+function processStartSpanIf {
+  if ! processIf $1 "<span class=\"$2\">"; then return 1; fi
+}
+
+## ### </span>
+#------------------------------------------------------------------------------
+function processEndSpanIf {
+  if ! processIf $1; then return 1; fi
+  print -rn "</span>"
+}
+## ### 正規表現にマッチしたら処理する。
+## Params:
+## - $1 : テストする正規表現
+## - $2 : もしマッチしていたらマッチした文字列の前に出力する。
+## - $3 : もしマッチしていたらマッチした文字列の後に出力する。
+#------------------------------------------------------------------------------
+function processMatch {
+  if [[ ! $buf =~ $1 ]]; then return 1; fi
+  #             ┗正規表現でテストする。
+  print -rn - $2
+  processChar ${#MATCH}
+  #               ┗マッチの結果が格納されている。
+  print -rn - $3
+}
+
+## ### 文字実体参照を処理する。
+#------------------------------------------------------------------------------
+function processEntity {
+  processMatch "^&(amp|quot|lt|gt);"
+  return $?
+}
+function
 
 ## ### 一行コメントを処理する。
 ## Params:
 ## - $1 : 一行コメントを開始するパターン。初期値は'#'
 ## - $2 : コメントはspan要素で出力される。その際のclassを指定する。
 ##        初期値は"comment"
-function processComment {
+#------------------------------------------------------------------------------
+function processOneLineComment {
   local header=${1:-'#'} class=${2:-comment}
-  if [[ $rest != $header* ]]; then return 1; fi
-  print -rn - "<span class=\"$class\">$rest</span>"
-  rest=
+  if ! processIf $header "<span class=\"$class\">"; then return 1; fi
+  print -rn - "$buf</span>"
+  buf=
 }
 
-## ### エスケープシーケンスを処理する。
-function processEscapeSequence {
-  if [[ $rest != "\\"* ]]; then return 1; fi
-  processChar 2
-}
 
-## ### 文字列を開始する。
-## Params:
-## - $1 : クォート文字列。初期値は"'"。
-## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
-function processQuoteOpen {
-  local q=${1:-"'"} class=${2:-string}
-  if [[ -n $quote ]]; then return 1; fi
-  if [[ $rest != $q* ]]; then return 1; fi
-  quote=$q
-  print -rn - "<span class=\"$class\">"
+## ### 最も単純なエスケープシーケンスを処理する。
+#------------------------------------------------------------------------------
+function processSimpleEscapeSequence {
+  if ! processIf "\\"; then return 1; fi
   processChar
 }
 
-## ### 文字列を終了する。
-function processQuoteClose {
-  if [[ -z $quote ]]; then return 1; fi
-  if [[ $rest != $quote* ]]; then return 1; fi
-  processChar ${#quote}
-  print -rn - "</span>"
-  quote=
+## ### シンプルな文字列を処理する。
+#------------------------------------------------------------------------------
+function processSimpleQuote {
+  local q=${1:-'&quot;'} class=${2:-string}
+  if ! processStartSpanIf $q $class; then return 1; fi
+  while feedBuffer; do
+    if processEndSpanIf $q; then break; fi
+    processSimpleEscapeSequence || processChar
+  done
 }
+
 
 ## ### 一単語処理する。
 ## Params:
 ## - $1 : 単語を構成する一文字にマッチする正規表現。
 ##        初期値は"[a-zA-Z0-9_]"
+#------------------------------------------------------------------------------
 function processWord {
   local r=${1:-'[a-zA-Z0-9_]'}
-  if [[ $rest =~ "^$r+" ]]; then
-    processChar ${#MATCH}
-  else
-    return 1;
-  fi
+  processMatch "^$r+"
+  return $?
 }
 
 ## ### キーワードを処理する。
 ## Params:
 ## - $1 : キーワードを"|"で繋いだ文字列。
 ## - $2 : キーワードを括るspan要素のclass属性。初期値は"keyword"。
+#------------------------------------------------------------------------------
 function processKeywords {
   local keys=$1 class=${2:-keyword}
-  if [[ ! $rest =~ "^($keys)[[:>:]]" ]]; then return 1; fi
-  print -rn - "<span class=\"$class\">"
-  processChar ${#MATCH}
-  print -rn - "</span>"
-}
-
-## ### $変数参照を処理する。
-## zshの変数の参照の様なものを処理する。
-## Params:
-## - $1 : 処理結果が格納されるspan要素のclass属性。初期値は"variable"。
-function processVariableReference {
-  local class=${1:-variable} nest=0
-  if [[ $rest != '$'* ]]; then return 1; fi
-  print -rn - "<span class=\"$class\">"
-  processChar;
-  if [[ $rest = '{'* ]]; then
-    ((nest++))
-    while [[ -n $rest ]]; do
-      processChar
-      if   (( $nest == 0 )); then
-        break
-      elif [[ $rest = '}'* ]]; then
-        ((nest--))
-      elif [[ $rest = '{'* ]]; then
-        ((nest++))
-      fi
-    done
-  elif [[ $rest = '('* ]]; then
-    ((nest++))
-    while [[ -n $rest ]]; do
-      processChar
-      if   (( $nest == 0 )); then
-        break;
-      elif [[ $rest = ')'* ]]; then
-        ((nest--))
-      elif [[ $rest = '('* ]]; then
-        ((nest++))
-      fi
-    done
-  elif [[ $rest = '&quot;'* ]]; then
-  else
-    processWord "[a-zA-Z0-9_:]" || processChar
-  fi
-  print -rn - "</span>"
+  processMatch "^($keys)[[:>:]]" "<span class=\"$class\">" "</span>"
+  return $?
 }
 
 ## ### 出力行を処理する。
 ## Params:
 ## - $1 : 出力行の開始パターンを指定する。初期値は"#>"
 ## - $2 : 出力行が括られるspan要素のclass属性。初期値は"output"。
+#------------------------------------------------------------------------------
 function processOutput {
   local header=${1:-'#&gt;'} class=${2:-output}
-  if [[ $rest != $header* ]]; then return 1; fi
-  print -rn - "<span class=\"$class\">${rest:${#header}}</span>"
-  rest=
+  if [[ $buf != $header* ]]; then return 1; fi
+  print -rn - "<span class=\"$class\">${buf:${#header}}</span>"
+  buf=
 }
 
 ## ## 個別の言語の処理
+#//////////////////////////////////////////////////////////////////////////////
 
 ## ### Shell Script を処理する。
+#==============================================================================
 function processSh {
   local key1=(function if then elif else fi local while do done for in \
-              case esac)
-  local key2=(echo print printf return exit setopt unsetopt typeset)
-  local rest=$1
-  while [[ -n $rest ]]; do
-    if   [[ $quote = '&quot;' ]]; then
-      processEscapeSequence || processVariableReference || \
-      processQuoteClose || processChar
-    elif [[ $quote = "'" ]]; then
-      processQuoteClose || processChar
+    case esac typeset setopt unsetopt return break)
+  local key2=(echo print printf exit)
+  while feedBuffer; do
+    processOutput || \
+    processOneLineComment || \
+    processSingleQuoteOfSh || \
+    processDoubleQuoteOfSh || \
+    processVariableReferenceOfSh || \
+    processSimpleEscapeSequence || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
+  done
+}
+
+## ### 文字列を開始する。
+## Params:
+## - $1 : クォート文字列。初期値は"'"。
+## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
+#------------------------------------------------------------------------------
+function processSingleQuoteOfSh {
+  local q=${1:-"'"} class=${2:-string}
+  if ! processStartSpanIf $q $class; then return 1; fi
+  while feedBuffer; do
+    if processEndSpanIf $q; then break; fi
+    processSimpleEscapeSequence || \
+    processChar
+  done
+}
+
+## ### 文字列を開始する。
+## Params:
+## - $1 : クォート文字列。初期値は"&quot;"。
+## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
+#------------------------------------------------------------------------------
+function processDoubleQuoteOfSh {
+  local q=${1:-"&quot;"} class=${2:-string}
+  if ! processStartSpanIf $q $class; then return 1; fi
+  while feedBuffer; do
+    if processEndSpanIf $q; then break; fi
+    processSimpleEscapeSequence || \
+    processVariableReferenceOfSh || \
+    processChar
+  done
+}
+## ### $変数参照を処理する。
+## zshの変数の参照の様なものを処理する。
+## Params:
+## - $1 : 処理結果が格納されるspan要素のclass属性。初期値は"variable"。
+#------------------------------------------------------------------------------
+function processVariableReferenceOfSh {
+  local class=${1:-variable}
+
+  # &" は変数ではない。
+  if [[ $buf = \$\&quot\;* ]]; then return 1; fi
+  if ! processStartSpanIf '$' $class; then return 1; fi
+
+  processBalancedBracketOfSh || \
+  processEntity || \
+  processWord || \
+  processChar
+  print -rn - "</span>"
+}
+
+## ### 対応する括弧を処理する。
+#------------------------------------------------------------------------------
+function processBalancedBracketOfSh {
+  processBalancedOfSh || \
+  processBalancedOfSh '(' ')' || \
+  processBalancedOfSh '[' ']'
+  return $?
+}
+
+## ### 変数参照内部のトークンを処理する。
+#------------------------------------------------------------------------------
+function processShTokenInVariableReference {
+  processVariableReferenceOfSh || \
+  processSingleQuoteOfSh || \
+  processDoubleQuoteOfSh || \
+  processSimpleEscapeSequence || \
+  processWord || \
+  processChar
+  return $?
+}
+
+## ### 対応する括弧を処理する。
+## Params:
+## - $1 : 開き括弧。初期値は'{'
+## - $2 : 閉じ括弧。初期値は'}'
+#------------------------------------------------------------------------------
+function processBalancedOfSh {
+  local open=${1:-\{} close=${2:-\}}
+  if ! processIf $open; then return 1; fi
+  while feedBuffer; do
+    if processIf $close; then
+      break;
     else
-      processVariableReference || \
-      processOutput || processComment || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processQuoteOpen "\`" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
+      processBalancedBracketOfSh || \
+      processShTokenInVariableReference
     fi
   done
 }
 
 ## ### Tcl を処理する。
+#==============================================================================
 function processTcl {
   local key1=(proc if then elseif else for set switch default while upvar \
-    global package namespace eval provide export ensemble)
-  local key2=(puts return incr array require)
-  local rest=$1
-  while [[ -n $rest ]]; do
-    if [[ $quote = '&quot;' ]]; then
-      processEscapeSequence || processVariableReference || \
-      processQuoteClose || processChar
+    global package namespace eval provide export ensemble foreach)
+  local key2=(puts return incr array require expr dict wm grid)
+  while feedBuffer; do
+    processOutput || \
+    processOneLineComment || \
+    processVariableReferenceOfTcl || \
+    processDoubleQuoteOfTcl || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
+  done
+}
+
+#------------------------------------------------------------------------------
+function processDoubleQuoteOfTcl {
+  local q=${1:-"&quot;"} class=${2:-string}
+  if ! processStartSpanIf $q $class; then return 1; fi
+  while feedBuffer; do
+    if processEndSpanIf $q; then break; fi
+    processSimpleEscapeSequence || \
+    processVariableReferenceOfTcl || \
+    processBalancedOfTcl '[' ']' "</span>" "<span class=\"$class\">" || \
+    processChar
+  done
+}
+
+#------------------------------------------------------------------------------
+function processBalancedOfTcl {
+  local open=${1:-\{} close=${2:-\}}
+  if ! processIf $open $3; then return 1; fi
+  while feedBuffer; do
+    if processIf $close; then
+      break
     else
-      processVariableReference || \
-      processOutput || processComment || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processQuoteOpen "\`" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
+      processBalancedOfTcl $open $close || \
+      processTclToken
     fi
   done
+  print -rn $4
+}
+#------------------------------------------------------------------------------
+function processVariableReferenceOfTcl {
+  local class=${1:-variable}
+  if ! processStartSpanIf '$' $class; then return 1; fi
+  processWord || \
+  processChar
+  print -rn - "</span>"
 }
 
 ## ### AppleScript を処理する。
+#==============================================================================
 function processAppleScript {
   local key1=(on end do set to of)
   local key2=(try return)
-  rest=$1
-  while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
-      processQuoteClose || processChar
-    else
-      processComment '--' || \
-      processQuoteOpen '&quot;' || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
-    fi
+  while feedBuffer; do
+    processSimpleQuote || \
+    processOneLineComment '--' || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
   done
 }
 
-
 ## ### C/C++ を処理する。
+#==============================================================================
 function processC {
   local key1=(const for return if else while static switch case using \
     namespace constexpr noexcept enum class struct)
   local key2=(int void double size_t unsigned auto byte short )
-  rest=$1
-  while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
-      processEscapeSequence || processQuoteClose || processChar
-    else
-      processOutput '//&gt;' || processComment || processComment '//' || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
-    fi
+
+  while feedBuffer; do
+    processSimpleQuote || \
+    processSimpleQuote "'" || \
+    processOneLineComment || \
+    processOneLineComment '//' || \
+    processOutput '//&gt;' || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
+  done
+}
+
+## ### Java を処理する。
+#==============================================================================
+function processJava {
+  local key1=(public const for return if else while static case  \
+    enum class struct package module requires exports yield)
+  local key2=(String void byte short int long float double boolean char)
+  while feedBuffer; do
+    processSimpleQuote || \
+    processSimpleQuote "'" || \
+    processOutput '//&gt;' || \
+    processOneLineComment || \
+    processOneLineComment '//' || \
+    processOneLineComment '#!' || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
   done
 }
 
 ## ### Fortran を処理する。
+#==============================================================================
 function processFortran {
   local key1=(for return if else while switch case use \
     namespace constexpr noexcept enum class struct end program \
     module contains function implicit none subroutine data type)
   local key2=(character allocatable integer real complex dimension \
     double precision)
-  rest=$1
-  while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
-      processEscapeSequence || processQuoteClose || processChar
-    else
-      processOutput '!&gt;' || processComment || processComment '!' || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
-    fi
+
+  while feedBuffer; do
+    processOutput '!&gt;' || \
+    processOneLineComment || \
+    processOneLineComment '!' || \
+    processSimpleQuote || \
+    processSimpleQuote "'" || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
   done
 }
 
 ## ### Lua を処理する。
+#==============================================================================
 function processLua {
-  local key1=(const for return if else while static switch case using \
-    namespace constexpr noexcept enum class struct)
-  local key2=(int void double size_t unsigned auto byte short )
-  rest=$1
-  while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
-      processEscapeSequence || processQuoteClose || processChar
-    else
-      processOutput '--&gt;' || processComment '--' || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
-    fi
+  local key1=(for return if else while switch case function)
+  local key2=(print)
+
+  while feedBuffer; do
+    processOutput '--&gt;' || \
+    processSimpleQuote || \
+    processOneLineComment '--' || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
   done
 }
 
+
 ## ### TypeScript を処理する。
+#==============================================================================
 function processTypeScript {
   local key1=(const for return if else while static switch case using \
-    namespace constexpr noexcept enum class struct function)
-  local key2=(var let const )
-  rest=$1
-  while [[ -n $rest ]]; do
-    if [[ -n $quote ]]; then
-      processEscapeSequence || processQuoteClose || processChar
-    else
-      processOutput '//&gt;' || processComment || processComment '//' || \
-      processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-      processKeywords ${(j<|>)key1} || \
-      processKeywords ${(j<|>)key2} 'keyword2' || \
-      processWord || \
-      processChar
-    fi
+    namespace enum class struct function interface extends type var let \
+    const typeof export import from as async await throw new try catch)
+  local key2=(number string any void)
+  while feedBuffer; do
+#     if [[ -n $quote ]]; then
+#       processEscapeSequence || processQuoteClose || processChar
+#     else
+#       processOutput '//&gt;' || processComment || processComment '//' || \
+#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+#       processQuoteOpen '`' || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
   done
+}
+
+## ### JSON を処理する。
+#==============================================================================
+function processJSON {
+  local key1=(const for return if else while static switch case using \
+    namespace constexpr noexcept enum class struct)
+  local key2=(int void double size_t unsigned auto byte short )
+  while feedBuffer; do
+#   rest=$1
+#   while [[ -n $rest ]]; do
+#     if [[ -n $quote ]]; then
+#       processEscapeSequence || processQuoteClose || processChar
+#     else
+#       processOutput '//&gt;' || processComment || processComment '//' || \
+#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
+  done
+}
+
+## ### SQL を処理する。
+#==============================================================================
+function processSQL {
+  local key1=(select)
+  local key2=(.exit .help .print .databases .tables .schema .fullshcema .output .once .mode .header .nullvalue)
+  while feedBuffer; do
+#   while [[ -n $rest ]]; do
+#     if [[ -n $quote ]]; then
+#       processEscapeSequence || processQuoteClose || processChar
+#     else
+#       processOutput '--&gt;' || processComment '--' || \
+#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+    processKeywords ${(j<|>)key1} || \
+    processKeywords ${(j<|>)key2} 'keyword2' || \
+    processWord || \
+    processChar
+  done
+}
+
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+## ## code要素を処理する。
+## - それぞれの言語に処理を分配する。
+#------------------------------------------------------------------------------
+function processCode {
+  feedBuffer -n
+  # Tcl
+  if   [[ $1 == tcl ]]; then
+    processTcl
+  # C/C++
+  elif [[ $1 == c || $1 == cpp ]]; then
+    processC
+  # Fortran
+  elif [[ $1 == fortran ]]; then
+    processFortran
+  # AppleScript
+  elif [[ $1 == applescript ]]; then
+    processAppleScript
+  # Lua
+  elif [[ $1 == lua ]]; then
+    processLua
+  # TypeScript
+  elif [[ $1 == ts ]]; then
+    processTypeScript
+  # JSON
+  elif [[ $1 == json ]]; then
+    processJSON
+  # SQL
+  elif [[ $1 == sql ]]; then
+    processSQL
+  # Java
+  elif [[ $1 == java ]]; then
+    processJava
+  # Sh
+  else
+    processSh
+  fi
 }
 
 ## ## HTML Body
 ## cmark-gfmの出力がここに来る。
+#------------------------------------------------------------------------------
 function processBody {
-  local language= rest pre tag post
-  # タグ以外の平文を処理する。
-  function processNonTag {
-    if [[ -z $1 ]]; then return; fi
-    # sh
-    if   [[ $language == sh ]]; then
-      processSh $1
-    # Tcl
-    elif [[ $language == tcl ]]; then
-      processTcl $1
-    # C/C++
-    elif [[ $language == c || $language == cpp ]]; then
-      processC $1
-    elif [[ $language == fortran ]]; then
-      processFortran $1
-    elif [[ $language == applescript ]]; then
-      processAppleScript $1
-    elif [[ $language == lua ]]; then
-      processLua $1
-    elif [[ $language == ts ]]; then
-      processTypeScript $1
-    else
-      print -rn - $1
-    fi
-  }
-  # タグを処理する。
-  function processTag {
-    if [[ -z $1 ]]; then return; fi
-    print -rn - $1
-    # code要素が来たらclass属性をlanguageに格納する。
-    if [[ $1 =~ "^<code[[:space:]]+class[[:space:]]*=[[:space:]]*\"language-([^\"]*)\"[[:space:]]*>$" ]]; then
-      language=$match[1]
-      quote=
-      print -rn - "<div class=\"language-type\">$language</div>";
-    # /codeタグが来たらlanguageを終わる。
-    elif [[ $1 =~ "^</code[[:space:]]*>$" ]]; then
-      language=
-    fi
-  }
+  local language rest pre tag
+  local -a code
 
-  while IFS= read -r line; do
-    rest=$line
+  while IFS= read -r rest; do
     while [[ -n $rest ]]; do
       # タグとそれ以外に分離する。
       if [[ ! $rest =~ "^([^<]*)(<[^>]+>)?(.*)" ]]; then continue; fi
-      pre=$match[1]; tag=$match[2]; post=$match[3]
-      processNonTag $pre
-      processTag $tag
-      rest=$post
+      pre=$match[1]; tag=$match[2]; rest=$match[3]
+
+      # code要素が来たら
+      if [[ $tag =~ "^<code[[:space:]]+class[[:space:]]*=[[:space:]]*\"language-([^\"]*)\"[[:space:]]*>$" ]]; then
+        language=${match[1]:-sh}
+        print -rn - "<div class=\"language-type\">$language</div>";
+        print -rn - $pre$tag
+        code=($rest)
+        while IFS= read -r rest; do
+          if [[ ! $rest =~ "^([^<]*)(<[^>]+>)?(.*)" ]]; then continue; fi
+          pre=$match[1]; tag=$match[2]; rest=$match[3]
+          code+=$pre
+          # /codeタグが来たらlanguageを終わる。
+          if [[ $tag =~ "^</code[[:space:]]*>$" ]]; then
+            print -lr - $code | processCode $language
+            print -rn - $tag
+            break;
+          fi
+        done
+      else
+        print -rn - $pre$tag
+      fi
     done
-    echo
+    print -
   done
 }
 
+## ## MAIN PROGRAM
+##############################################################################
 ## ### オプションのパース
 # オプションをパースする。
-while getopts o:b:h OPT; do
+while getopts o:t:b:h OPT; do
   case $OPT in
     o) output=$OPTARG; exec > $OPTARG;;
+    #    ┗ HTMLのtitle要素に使う。
+    t) output=$OPTARG;;
     b) BACKEND=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
@@ -477,11 +709,11 @@ writeHeader
 # stdin がターミナル(= パイプに接続されていない)。
 if [ -t 0 ]; then
   # 引数がある場合
-  if [[ $1 ]]; then
+  if [[ -n $1 ]]; then
     ${=BACKEND} $1 | processBody
+  # 引数がない場合、現在のフォルダ以下から`.md`ファイルを列挙して処理する。
   else
-    print $USAGE
-    exit 1
+    print - '    <h1>implement this!</h1>' >&2;
   fi
 # stdin がパイプに接続されている。
 else

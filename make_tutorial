@@ -73,6 +73,8 @@ GitHub='https://github.com/garlic-flavor/MakeTutorial'
 ## >zsh make_tutorial make_tutorial | zsh make_md2html -oREADME.html
 ## ```
 
+THIS_SCRIPT=$0
+
 ## ## 使い方
 USAGE="MakeTutorial: ソースコードからMarkdownを出力する。
 $LICENSE
@@ -81,6 +83,9 @@ GitHub: $GitHub
 オプション:
   -o : 出力ファイルを指定する。
   -t : ファイルの中身をパイプで渡す際に、タイトルと拡張子を指定する。
+  -l : 言語を設定する。
+  -r : 対象ファイルを実行する。
+  -b : 見出しのベースレベルを指定する。初期値は0。
 
 書式:
 >$0 [-o targetfile] [file1 file2 ...]
@@ -99,23 +104,29 @@ GitHub: $GitHub
 * パイプでファイルの中身を渡す。
 >cat main.c | $0 -t My_Special_Program.c
 "
+
 ## ## 対応言語
 function setLanguageSpec {
+  local line
+  EXT=$1
   # Tcl
   if   [[ $1 = tcl ]]; then 
-    EXT=$1
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
   # Shell script
-  elif [[ $1 = sh || -z $1 ]]; then
+  elif [[ $1 = (|z)sh || -z $1 ]]; then
     EXT=sh
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
   # C/C++ Programming Language
   elif [[ $1 = c(|pp) ]]; then
-    EXT=$1
+    DOC_HEADER='///'
+    OUTPUT_HEADER='//>'
+
+  # Java
+  elif [[ $1 = java ]]; then
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
 
@@ -127,21 +138,43 @@ function setLanguageSpec {
 
   # Lua
   elif [[ $1 = lua ]]; then
-    EXT=$1
     DOC_HEADER='---'
     OUTPUT_HEADER='-->'
 
   # TypeScript
   elif [[ $1 = ts ]]; then
-    EXT=ts
+    DOC_HEADER='//*'
+    OUTPUT_HEADER='//>'
+
+  # JSON
+  elif [[ $1 = json(|5) ]]; then
+    EXT=json
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
+
+  # SQL
+  elif [[ $1 = sql ]]; then
+    DOC_HEADER='---'
+    OUTPUT_HEADER='-->'
+
+  # Markdown
+  elif [[ $1 = md ]]; then
+    while IFS= read -r line; do
+      print -r - $line
+    done
+    exit
 
   # 未対応ファイルだった。
   else
    print - "$1は非対応です。" >&2
    exit 1
   fi
+}
+
+## ## 見出しの出力
+function printHeader {
+  level=$(( base_heading_level + $1 ))
+  print -rn ${(l:$level::#:)}
 }
 
 ## ## 詳細
@@ -165,10 +198,15 @@ function processContents {
 
   # ファイル名を見出しにする。
   # ファイル名から拡張子を除いて、アンダースコアをスペースに置換している。
-  print - '# '${filepath:t:r} | sed s/_/\ /g
+  printHeader 1;
+  print - ' '${filepath:t:r} | sed s/_/\ /g
 
   # 言語用設定
-  setLanguageSpec ${filepath:e}
+  # 未設定の場合、拡張子から言語を決定する。
+  : ${language:=${filepath:e}}
+  if [[ -n $language ]]; then
+    setLanguageSpec $language
+  fi
 
   local counter=1 # 出力の何行目かを格納する。
   local insidecode=false # コードブロックかどうかを格納する。
@@ -209,6 +247,13 @@ function processContents {
     # shebangはとばす。
     if   (( $linenum == 1 )) && [[ $line = '#!'* ]]; then
       firstline=($line)
+      # 言語が未設定の場合、shebangから言語を決定する。
+      if [[ -z $language ]]; then
+        language=${${${${line#\#\!}#*/env\ }%%\ *}##*/}
+        if [[ -n $language ]]; then
+          setLanguageSpec $language
+        fi
+      fi
     elif (( $linenum == 1 )) && [[ $line = '//usr/bin/env'* ]]; then
       firstline=($line)
     elif (( $linenum == 1 )) && [[ ${line:l} = '#if'* ]]; then
@@ -233,14 +278,29 @@ function processContents {
     elif [[ $tline = *hideshebang ]]; then
       firstline=
     elif [[ $tline = *hide ]]; then
-      enterCode
+      :
     elif [[ $tline = *hide! ]]; then
-      enterCode
       ((counter++))
     # 「##>」で始まる行はシェルでコマンドを実行する。
     elif [[ $tline = $DOC_HEADER\>* ]]; then
       leaveCode
       eval ${line#*$DOC_HEADER\>}
+
+    # 「##< filename.c」で始まる行は、'filename.c'をインクルードする。
+    elif [[ $tline = $DOC_HEADER\<* ]]; then
+      leaveCode
+      if [[ -d ${filepath%/*} ]]; then
+        pushd ${filepath%/*}
+        eval "cat ${line#*\<} | $THIS_SCRIPT -b $((base_heading_level+1)) -t ${line#*\<}"
+        popd
+      else
+        eval "cat ${line#*\<} | $THIS_SCRIPT -b $((base_heading_level+1)) -t ${line#*\<}"
+      fi
+    # ドキュメントのヘッダ行
+    elif ((0 < base_heading_level)) && [[ $tline = $DOC_HEADER\ \#* ]]; then
+      leaveCode
+      printHeader 0;
+      print -r - ${line#*$DOC_HEADER\ }
     # ドキュメント行
     elif [[ $tline = $DOC_HEADER\ * ]]; then
       leaveCode
@@ -279,13 +339,17 @@ function processAFile {
 ## ### オプションのパース
 title=
 runsource=
+language=
+base_heading_level=0;
 # オプションをパースする。
-while getopts o:t:rh OPT; do
+while getopts o:t:rl:b:h OPT; do
   case $OPT in
     o) exec >$OPTARG;;
     #   ┗━━━┻ これ以降をリダイレクト
     t) title=$OPTARG;;
     r) runsource=true;;
+    l) language=$OPTARG;;
+    b) base_heading_level=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
   esac
