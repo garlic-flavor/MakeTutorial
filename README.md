@@ -12,7 +12,7 @@
     - ドキュメントはインターフェイスの説明であるのに対し、
       コードそのものへの注釈の形が望ましい。
     - Doxygenは高機能であるために同等以上の機能を提供するが、
-      文法がやや複雑であり、記述量もやや多く、出力の量も多い。
+      文法がやや複雑であり、記述量もやや多く、出力の量がとにかく多い。
 - 出力されるMarkdownにプログラムの出力が入っていると読みやすい。
 
 ## ライセンス
@@ -74,11 +74,9 @@ MarkdownをHTMLにする。
 >zsh make_tutorial make_tutorial | zsh make_md2html -oREADME.html
 ```
 
-```sh
-THIS_SCRIPT=$0
-```
 ## 使い方
 ```sh
+THIS_SCRIPT=$0
 USAGE="MakeTutorial: ソースコードからMarkdownを出力する。
 $LICENSE
 GitHub: $GitHub
@@ -124,7 +122,7 @@ function setLanguageSpec {
     DOC_HEADER='##'
     OUTPUT_HEADER='#>'
 
-  # C/C++ Programming Language
+  # C/C++
   elif [[ $1 = c(|pp) ]]; then
     DOC_HEADER='///'
     OUTPUT_HEADER='//>'
@@ -163,10 +161,9 @@ function setLanguageSpec {
 
   # Markdown
   elif [[ $1 = md ]]; then
-    while IFS= read -r line; do
-      print -r - $line
-    done
-    exit
+    EXT=
+    DOC_HEADER=
+    OUTPUT_HEADER=
 
   # 未対応ファイルだった。
   else
@@ -193,13 +190,13 @@ function processContents {
   local -a outs
   if   [[ -x $filepath ]]; then
     #          ┏ 絶対パスを得る。
-    ${filepath:a} | { while IFS= read -r line; do
+    ${filepath:a} | while IFS= read -r line; do
       outs+=$line
-    done}
+    done
   elif [[ -n $runsource && -a $filepath ]]; then
-    zsh ${filepath:a} | { while IFS= read -r line; do
+    zsh ${filepath:a} | while IFS= read -r line; do
       outs+=$line
-    done}
+    done
   fi
 
   # ファイル名を見出しにする。
@@ -209,8 +206,15 @@ function processContents {
 
   # 言語用設定
   # 未設定の場合、拡張子から言語を決定する。
+  language=$arglanguage
   : ${language:=${filepath:e}}
-  if [[ -n $language ]]; then
+  # Markdown だった時はそのまま出力して終了させる。
+  if   [[ $language = md ]]; then
+    while IFS= read -r line; do
+      print -r - $line
+    done
+    return
+  elif [[ -n $language ]]; then
     setLanguageSpec $language
   fi
 
@@ -260,8 +264,10 @@ function processContents {
           setLanguageSpec $language
         fi
       fi
+    # C言語でのみ使える特殊shebangを処理する。
     elif (( $linenum == 1 )) && [[ $line = '//usr/bin/env'* ]]; then
       firstline=($line)
+    # C系のプリプロセッサを持つ言語で使えるpolyglot headerを処理する。
     elif (( $linenum == 1 )) && [[ ${line:l} = '#if'* ]]; then
       firstline=($line)
       while IFS= read -r subline; do
@@ -280,23 +286,27 @@ function processContents {
     # 処理を終える。
     elif [[ $tline = eof ]]; then
       break
-    # 末尾が「hide」である行は出力しない。
+    # shebangを出力しない。
     elif [[ $tline = *hideshebang ]]; then
       firstline=
+    # 末尾が「hide」である行は出力しない。
     elif [[ $tline = *hide ]]; then
       :
+    # この行を出力せず、標準出力の埋め込みも一行飛ばす。
     elif [[ $tline = *hide! ]]; then
       ((counter++))
     # 「##>」で始まる行はシェルでコマンドを実行する。
     elif [[ $tline = $DOC_HEADER\>* ]]; then
       leaveCode
       eval ${line#*$DOC_HEADER\>}
-
     # 「##< filename.c」で始まる行は、'filename.c'をインクルードする。
     elif [[ $tline = $DOC_HEADER\<* ]]; then
       leaveCode
+      # フォルダが違う場合はまずカレントフォルダを移動する。
       if [[ -d ${filepath%/*} ]]; then
         pushd ${filepath%/*}
+        # cat をかませないとこの関数の標準入力を拾ってしまう。
+        # プロセスを分けないとグローバル変数を汚染してしまう。
         eval "cat ${line#*\<} | $THIS_SCRIPT -b $((base_heading_level+1)) -t ${line#*\<}"
         popd
       else
@@ -343,10 +353,12 @@ function processAFile {
   cat $filepath | processContents $filepath
 }
 ```
+## メインプログラム
 ### オプションのパース
 ```sh
 title=
 runsource=
+arglanguage=
 language=
 base_heading_level=0;
 # オプションをパースする。
@@ -356,7 +368,7 @@ while getopts o:t:rl:b:h OPT; do
     #   ┗━━━┻ これ以降をリダイレクト
     t) title=$OPTARG;;
     r) runsource=true;;
-    l) language=$OPTARG;;
+    l) arglanguage=$OPTARG;;
     b) base_heading_level=$OPTARG;;
     h) print $USAGE; exit;;
     *) print $USAGE; exit 1;;
@@ -377,14 +389,14 @@ if   [[ -t 0 ]]; then
   else
     #       数字で始まるファイル名を持つファイルそれぞれに対して
     #     ┏ サブフォルダを再帰検索
-    print -l **/<->* | {while read filepath; do
+    print -l **/<->* | while read filepath; do
       #          ┏ basename;path に変換
       echo ${filepath:t}';'$filepath
       #      ┏ basename でソート
-    done} | sort | { while read filepath; do
+    done | sort | while read filepath; do
       #              ┏ 先頭のbasenameを除く。
       processAFile ${filepath##*;}
-    done}
+    done
   fi
 # stdin がパイプに接続されていて、
 # titleが指定されている

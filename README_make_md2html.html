@@ -17,6 +17,9 @@
           border-left: 10px solid lightgray;
           padding-left: 10px
         }
+        em {
+          color: red;
+        }
         pre:has(code) {
           border-style: solid;
           border-width: 3px;
@@ -89,7 +92,8 @@
 <p>MarkdownからHTMLを生成する。</p>
 <h2>動機</h2>
 <ul>
-<li>MacOSでMarkdownを開くデフォルトアプリをXCodeから変えられない。</li>
+<li>MacOSでMarkdownを開くデフォルトアプリをXCodeから変えられない。
+そしてXCodeは起動が遅い。</li>
 <li>cmark-gfmの出力はコードのシンタックスハイライトがないので、
 そういうものを付ける。</li>
 <li>とりあえずHTML生成に対応しておけば何かいいことがあるかも知れない。</li>
@@ -138,6 +142,9 @@
         h3 {
           border-left: 10px solid lightgray;
           padding-left: 10px
+        }
+        em {
+          color: red;
         }
         pre:has(code) {
           border-style: solid;
@@ -219,11 +226,13 @@
                <span class="comment"># 未処理の一行を格納する。</span>
 </code></pre>
 <h3>バッファが空なら埋める。</h3>
-<p>もしバッファが空なら、改行を出力し、バッファに読み込む。
-Params:</p>
+<p>もしバッファが空なら、改行を出力し、バッファに読み込む。</p>
+<p>Params:</p>
 <ul>
-<li>-n: 改行を挿入しない。
-Returns:</li>
+<li>-n: 改行を挿入しない。</li>
+</ul>
+<p>Return:</p>
+<ul>
 <li>読み込めるものがなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
@@ -266,6 +275,11 @@ Returns:</li>
 <ul>
 <li>$1 : テストする文字列</li>
 <li>$2 : もし真だったら先にこれも出力する。</li>
+<li>$3 : もし真だったら後にこれも出力する。</li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>$1で始まっていなけれは1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processIf {
@@ -273,19 +287,33 @@ Returns:</li>
   <span class="comment">#               ┗後ろに任意の文字が続いていても良い</span>
   <span class="keyword2">print</span> -rn - <span class="variable">$2</span>
   processChar <span class="variable">${#1}</span>
+  <span class="keyword2">print</span> -rn - <span class="variable">$3</span>
 }
 </code></pre>
 <h3><!-- raw HTML omitted -->要素を開始する。</h3>
+<p>Params:</p>
+<ul>
+<li>$1 : テストする文字列</li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>$1で始まっていなければ1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processStartSpanIf {
-  <span class="keyword">if</span> ! processIf <span class="variable">$1</span> <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$2</span>\&quot;&gt;&quot;</span>; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
+  processIf <span class="variable">$1</span> <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$2</span>\&quot;&gt;&quot;</span>
+  <span class="keyword">return</span> <span class="variable">$?</span>
 }
 </code></pre>
 <h3><!-- raw HTML omitted --></h3>
+<p>Params:</p>
+<ul>
+<li>$1 : テストする文字列。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processEndSpanIf {
-  <span class="keyword">if</span> ! processIf <span class="variable">$1</span>; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword2">print</span> -rn <span class="string">&quot;&lt;/span&gt;&quot;</span>
+  processIf <span class="variable">$1</span> <span class="string">''</span> <span class="string">'&lt;/span&gt;'</span>
+  <span class="keyword">return</span> <span class="variable">$?</span>
 }
 </code></pre>
 <h3>正規表現にマッチしたら処理する。</h3>
@@ -306,29 +334,40 @@ Returns:</li>
 }
 </code></pre>
 <h3>文字実体参照を処理する。</h3>
+<p>Return:</p>
+<ul>
+<li>文字実体参照でなければ1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processEntity {
   processMatch <span class="string">&quot;^&amp;(amp|quot|lt|gt);&quot;</span>
   <span class="keyword">return</span> <span class="variable">$?</span>
 }
-<span class="keyword">function</span>
 </code></pre>
 <h3>一行コメントを処理する。</h3>
 <p>Params:</p>
 <ul>
 <li>$1 : 一行コメントを開始するパターン。初期値は'#'</li>
 <li>$2 : コメントはspan要素で出力される。その際のclassを指定する。
-初期値は&quot;comment&quot;</li>
+初期値は<code>comment</code></li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>コメント行でなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processOneLineComment {
   <span class="keyword">local</span> header=<span class="variable">${1:-<span class="string">'#'</span>}</span> class=<span class="variable">${2:-comment}</span>
   <span class="keyword">if</span> ! processIf <span class="variable">$header</span> <span class="string">&quot;&lt;span class=\&quot;<span class="variable">$class</span>\&quot;&gt;&quot;</span>; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
-  <span class="keyword2">print</span> -rn - <span class="string">&quot;<span class="variable">$buf</span>&lt;/span&gt;&quot;</span>
+  <span class="keyword2">print</span> -rn - <span class="variable">$buf</span><span class="string">&quot;&lt;/span&gt;&quot;</span>
   buf=
 }
 </code></pre>
 <h3>最も単純なエスケープシーケンスを処理する。</h3>
+<p>Return:</p>
+<ul>
+<li>バックスラッシュでなければ1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processSimpleEscapeSequence {
   <span class="keyword">if</span> ! processIf <span class="string">&quot;\\&quot;</span>; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
@@ -336,6 +375,15 @@ Returns:</li>
 }
 </code></pre>
 <h3>シンプルな文字列を処理する。</h3>
+<p>Params:</p>
+<ul>
+<li>$1 : クォート文字。ダブルクォートは文字実体参照により<code>&amp;quot;</code>になっている
+ので注意。</li>
+<li>$2 : span要素のclass属性を指定する。
+初期値は<code>string</code>。
+Return:</li>
+<li>クォートで始まっていなければ1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processSimpleQuote {
   <span class="keyword">local</span> q=<span class="variable">${1:-<span class="string">'&amp;quot;'</span>}</span> class=<span class="variable">${2:-string}</span>
@@ -350,7 +398,11 @@ Returns:</li>
 <p>Params:</p>
 <ul>
 <li>$1 : 単語を構成する一文字にマッチする正規表現。
-初期値は&quot;[a-zA-Z0-9_]&quot;</li>
+初期値は<code>[a-zA-Z0-9_]</code></li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>先頭文字が$1に含まれなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processWord {
@@ -363,7 +415,9 @@ Returns:</li>
 <p>Params:</p>
 <ul>
 <li>$1 : キーワードを&quot;|&quot;で繋いだ文字列。</li>
-<li>$2 : キーワードを括るspan要素のclass属性。初期値は&quot;keyword&quot;。</li>
+<li>$2 : キーワードを括るspan要素のclass属性。初期値は&quot;keyword&quot;。
+Return:</li>
+<li>キーワードでなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processKeywords {
@@ -373,10 +427,15 @@ Returns:</li>
 }
 </code></pre>
 <h3>出力行を処理する。</h3>
-<p>Params:</p>
+<p>行頭は1行コメントなので先にこちらを処理しないとヒットしない。
+Params:</p>
 <ul>
 <li>$1 : 出力行の開始パターンを指定する。初期値は&quot;#&gt;&quot;</li>
 <li>$2 : 出力行が括られるspan要素のclass属性。初期値は&quot;output&quot;。</li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>出力行でなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processOutput {
@@ -387,13 +446,15 @@ Returns:</li>
 }
 </code></pre>
 <h2>個別の言語の処理</h2>
-<pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#//////////////////////////////////////////////////////////////////////////////</span>
-</code></pre>
 <h3>Shell Script を処理する。</h3>
+<ul>
+<li><a href="https://roel.rs/cgi-bin/info2www?(zsh)Reserved+Words">zsh reserved words</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processSh {
-  <span class="keyword">local</span> key1=(<span class="keyword">function</span> <span class="keyword">if</span> <span class="keyword">then</span> <span class="keyword">elif</span> <span class="keyword">else</span> <span class="keyword">fi</span> <span class="keyword">local</span> <span class="keyword">while</span> <span class="keyword">do</span> <span class="keyword">done</span> <span class="keyword">for</span> <span class="keyword">in</span> \
-    <span class="keyword">case</span> <span class="keyword">esac</span> <span class="keyword">typeset</span> <span class="keyword">setopt</span> <span class="keyword">unsetopt</span> <span class="keyword">return</span> <span class="keyword">break</span>)
+  <span class="keyword">local</span> key1=(<span class="keyword">do</span> <span class="keyword">done</span> <span class="keyword">esac</span> <span class="keyword">then</span> <span class="keyword">elif</span> <span class="keyword">else</span> <span class="keyword">fi</span> <span class="keyword">for</span> <span class="keyword">case</span> <span class="keyword">if</span> <span class="keyword">while</span> <span class="keyword">function</span> \
+    <span class="keyword">repeat</span> <span class="keyword">time</span> <span class="keyword">until</span> <span class="keyword">select</span> <span class="keyword">coproc</span> <span class="keyword">nocorrect</span> <span class="keyword">foreach</span> <span class="keyword">end</span> <span class="keyword">declare</span> <span class="keyword">export</span> \
+    <span class="keyword">float</span> <span class="keyword">integer</span> <span class="keyword">local</span> <span class="keyword">readonly</span> <span class="keyword">typeset</span> <span class="keyword">then</span> <span class="keyword">in</span> <span class="keyword">setopt</span> <span class="keyword">unsetopt</span> <span class="keyword">return</span> <span class="keyword">break</span>)
   <span class="keyword">local</span> key2=(<span class="keyword2">echo</span> <span class="keyword2">print</span> <span class="keyword2">printf</span> <span class="keyword2">exit</span>)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processOutput || \
@@ -415,6 +476,10 @@ Returns:</li>
 <li>$1 : クォート文字列。初期値は&quot;'&quot;。</li>
 <li>$2 : 文字列を括るspan要素のクラス属性を指定する。初期値は&quot;string&quot;。</li>
 </ul>
+<p>Return:</p>
+<ul>
+<li>クォートで始まらなければ1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processSingleQuoteOfSh {
   <span class="keyword">local</span> q=<span class="variable">${1:-<span class="string">&quot;'&quot;</span>}</span> class=<span class="variable">${2:-string}</span>
@@ -427,10 +492,15 @@ Returns:</li>
 }
 </code></pre>
 <h3>文字列を開始する。</h3>
-<p>Params:</p>
+<p>内部で変数参照を処理する。
+Params:</p>
 <ul>
 <li>$1 : クォート文字列。初期値は&quot;&quot;&quot;。</li>
 <li>$2 : 文字列を括るspan要素のクラス属性を指定する。初期値は&quot;string&quot;。</li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>クォートで始まらなければ1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processDoubleQuoteOfSh {
@@ -450,10 +520,15 @@ Params:</p>
 <ul>
 <li>$1 : 処理結果が格納されるspan要素のclass属性。初期値は&quot;variable&quot;。</li>
 </ul>
+<p>Return:</p>
+<ul>
+<li><code>$</code>で始まらなければ1を返す。</li>
+<li><code>$&quot;</code>に対しても1を返す(正規表現の末尾を表す場合に現れる)。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processVariableReferenceOfSh {
   <span class="keyword">local</span> class=<span class="variable">${1:-variable}</span>
-  <span class="comment"># &amp;&quot; は変数ではない。</span>
+  <span class="comment"># $&quot; は変数ではない。</span>
   <span class="keyword">if</span> [[ <span class="variable">$buf</span> = \$\&amp;quot\;* ]]; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
   <span class="keyword">if</span> ! processStartSpanIf <span class="string">'$'</span> <span class="variable">$class</span>; <span class="keyword">then</span> <span class="keyword">return</span> 1; <span class="keyword">fi</span>
   processBalancedBracketOfSh || \
@@ -464,6 +539,10 @@ Params:</p>
 }
 </code></pre>
 <h3>対応する括弧を処理する。</h3>
+<p>Return:</p>
+<ul>
+<li>括弧ではない場合に1を返す。</li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processBalancedBracketOfSh {
   processBalancedOfSh || \
@@ -481,7 +560,6 @@ Params:</p>
   processSimpleEscapeSequence || \
   processWord || \
   processChar
-  <span class="keyword">return</span> <span class="variable">$?</span>
 }
 </code></pre>
 <h3>対応する括弧を処理する。</h3>
@@ -489,6 +567,10 @@ Params:</p>
 <ul>
 <li>$1 : 開き括弧。初期値は'{'</li>
 <li>$2 : 閉じ括弧。初期値は'}'</li>
+</ul>
+<p>Return:</p>
+<ul>
+<li>開き括弧でない場合に1を返す。</li>
 </ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processBalancedOfSh {
@@ -505,18 +587,36 @@ Params:</p>
 }
 </code></pre>
 <h3>Tcl を処理する。</h3>
+<ul>
+<li><a href="https://www.tcl-lang.org/man/tcl8.6/TclCmd/contents.h">Tcl Commands</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processTcl {
-  <span class="keyword">local</span> key1=(proc <span class="keyword">if</span> <span class="keyword">then</span> elseif <span class="keyword">else</span> <span class="keyword">for</span> set switch default <span class="keyword">while</span> upvar \
-    global package namespace eval provide export ensemble foreach)
-  <span class="keyword">local</span> key2=(puts <span class="keyword">return</span> incr array require expr dict wm grid)
+  <span class="keyword">local</span> key1=(after errorInfo load pwd tcl_rcFileName append eval lrange \
+    re_syntax tcl_startOfNextWord apply exec lrepeat read \
+    tcl_startOfPreviousWord argc <span class="keyword2">exit</span> lreplace refchan tcl_traceCompile \
+    argv expr lreverse regexp tcl_traceExec argv0 fblocked lsearch registry \
+    tcl_version array fconfigure lset regsub tcl_wordBreakAfter auto_execok \
+    fcopy lsort rename tcl_wordBreakBefore auto_import file mathfunc <span class="keyword">return</span> \
+    tcl_wordchars auto_load fileevent mathop safe tcltest auto_mkindex \
+    filename memory scan tell auto_path flush msgcat seek throw auto_qualify \
+    <span class="keyword">for</span> my self <span class="keyword">time</span> auto_reset <span class="keyword">foreach</span> namespace set timerate bgerror format \
+    next socket tm binary gets nextto source trace <span class="keyword">break</span> glob oo::class split \
+    transchan catch global oo::copy string try cd history oo::define subst \
+    unknown chan http oo::objdefine switch unload clock <span class="keyword">if</span> oo::object \
+    tailcall unset close incr oo::Slot Tcl update concat info open \
+    tcl::prefix uplevel continue interp package tcl_endOfWord upvar coroutine \
+    join parray tcl_findLibrary variable dde lappend pid tcl_interactive \
+    vwait dict lassign pkg::create tcl_library <span class="keyword">while</span> encoding lindex \
+    pkg_mkIndex tcl_nonwordchars yield env linsert platform tcl_patchLevel \
+    yieldto eof list platform::shell tcl_pkgPath zlib error llength proc \
+    tcl_platform errorCode lmap puts tcl_precision)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processOutput || \
     processOneLineComment || \
     processVariableReferenceOfTcl || \
     processDoubleQuoteOfTcl || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
-    processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
     processChar
   <span class="keyword">done</span>
@@ -542,7 +642,8 @@ Params:</p>
       <span class="keyword">break</span>
     <span class="keyword">else</span>
       processBalancedOfTcl <span class="variable">$open</span> <span class="variable">$close</span> || \
-      processTclToken
+      processVariableReferenceOfTcl || \
+      processChar
     <span class="keyword">fi</span>
   <span class="keyword">done</span>
   <span class="keyword2">print</span> -rn <span class="variable">$4</span>
@@ -557,45 +658,70 @@ Params:</p>
 }
 </code></pre>
 <h3>AppleScript を処理する。</h3>
+<ul>
+<li><a href="https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/reference/ASLR_keywords.html">AppleScript Keywords</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processAppleScript {
-  <span class="keyword">local</span> key1=(on end <span class="keyword">do</span> set to of)
-  <span class="keyword">local</span> key2=(try <span class="keyword">return</span>)
+  <span class="keyword">local</span> key1=(about above after against and apart from around as aside at \
+    back before beginning behind below beneath beside between but by \
+    considering contains contain continue copy div does eighth <span class="keyword">else</span> <span class="keyword">end</span> \
+    equals equal error every <span class="keyword2">exit</span> false fifth first <span class="keyword">for</span> fourth from front get \
+    given global <span class="keyword">if</span> ignoring <span class="keyword">in</span> instead of into is its it last <span class="keyword">local</span> me \
+    middle mod my ninth not on onto or out over property prop put \
+    reference ref <span class="keyword">repeat</span> <span class="keyword">return</span> returning script second set seventh since \
+    sixth some tell tenth that the <span class="keyword">then</span> third thru through timeout times to \
+    transaction true try <span class="keyword">until</span> use where <span class="keyword">while</span> whose with without)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processSimpleQuote || \
     processOneLineComment <span class="string">'--'</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
-    processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
     processChar
   <span class="keyword">done</span>
 }
 </code></pre>
 <h3>C/C++ を処理する。</h3>
+<ul>
+<li><a href="https://learn.microsoft.com/en-us/cpp/cpp/keywords-cpp?view=msvc-170">C++ Keywords</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processC {
-  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch <span class="keyword">case</span> using \
-    namespace constexpr noexcept enum class struct)
-  <span class="keyword">local</span> key2=(int void double size_t unsigned auto byte short )
+  <span class="keyword">local</span> key1=(alignas alignof and and_eq asm auto bitand bitor bool <span class="keyword">break</span> \
+    <span class="keyword">case</span> catch char char8_t char16_t char32_t class compl concept const \
+    const_cast consteval constexpr constinit continue co_await co_return \
+    co_yield decltype default delete <span class="keyword">do</span> double dynamic_cast <span class="keyword">else</span> enum \
+    explicit <span class="keyword">export</span> extern false <span class="keyword">float</span> <span class="keyword">for</span> friend goto <span class="keyword">if</span> inline int long \
+    mutable namespace new noexcept not not_eq nullptr operator or or_eq \
+    private protected public register reinterpret_cast requires <span class="keyword">return</span> short \
+    signed sizeof static static_assert static_cast struct switch template \
+    this thread_local throw true try typedef typeid typename union unsigned \
+    declaration using directive virtual void volatile wchar_t <span class="keyword">while</span> xor \
+    xor_eq)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processSimpleQuote || \
     processSimpleQuote <span class="string">&quot;'&quot;</span> || \
+    processOutput <span class="string">'//&amp;gt;'</span> || \
     processOneLineComment || \
     processOneLineComment <span class="string">'//'</span> || \
-    processOutput <span class="string">'//&amp;gt;'</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
-    processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
     processChar
   <span class="keyword">done</span>
 }
 </code></pre>
 <h3>Java を処理する。</h3>
+<ul>
+<li><a href="https://docs.oracle.com/javase/tutorial/java/nutsandbolts/_keywords.html">Java Language Keywords</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processJava {
-  <span class="keyword">local</span> key1=(public const <span class="keyword">for</span> <span class="keyword">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static <span class="keyword">case</span>  \
-    enum class struct package module requires exports yield)
-  <span class="keyword">local</span> key2=(String void byte short int long float double boolean char)
+  <span class="keyword">local</span> key1=( abstract continue <span class="keyword">for</span> new switch assert default goto package \
+    synchronized boolean <span class="keyword">do</span> <span class="keyword">if</span> private this <span class="keyword">break</span> double implements protected \
+    throw byte <span class="keyword">else</span> import public throws <span class="keyword">case</span> enum instanceof <span class="keyword">return</span> \
+    transient catch extends int short try char final interface static void \
+    class finally long strictfp volatile const <span class="keyword">float</span> native super <span class="keyword">while</span>)
+  <span class="keyword">local</span> key2=(String)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processSimpleQuote || \
     processSimpleQuote <span class="string">&quot;'&quot;</span> || \
@@ -611,13 +737,24 @@ Params:</p>
 }
 </code></pre>
 <h3>Fortran を処理する。</h3>
+<ul>
+<li><a href="https://fortranwiki.org/fortran/show/Keywords">Fortran Keywords</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processFortran {
-  <span class="keyword">local</span> key1=(<span class="keyword">for</span> <span class="keyword">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> switch <span class="keyword">case</span> use \
-    namespace constexpr noexcept enum class struct end program \
-    module contains <span class="keyword">function</span> implicit none subroutine data type)
-  <span class="keyword">local</span> key2=(character allocatable integer real complex dimension \
-    double precision)
+  <span class="keyword">local</span> key1=(assign backspace block data call close common continue data \
+    dimension <span class="keyword">do</span> <span class="keyword">else</span> <span class="keyword">else</span> <span class="keyword">if</span> <span class="keyword">end</span> endfile endif entry equivalence external \
+    format <span class="keyword">function</span> goto <span class="keyword">if</span> implicit inquire intrinsic open parameter pause \
+    <span class="keyword2">print</span> program read <span class="keyword">return</span> rewind rewrite save stop subroutine <span class="keyword">then</span> write \
+    allocatable allocate <span class="keyword">case</span> contains cycle deallocate elsewhere <span class="keyword2">exit</span> \
+    include interface intent module namelist nullify only operator optional \
+    pointer private procedure public recursive result <span class="keyword">select</span> sequence target \
+    use <span class="keyword">while</span> where elemental forall pure abstract associate asynchronous \
+    bind class deferred enum enumerator extends final flush generic import \
+    non_overridable nopass pass protected value volatile wait block \
+    codimension <span class="keyword">do</span> concurrent contiguous critical error stop submodule sync \
+    all sync images sync memory lock unlock impure <span class="keyword">select</span> rank non_recursive \
+    import)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processOutput <span class="string">'!&amp;gt;'</span> || \
     processOneLineComment || \
@@ -625,16 +762,19 @@ Params:</p>
     processSimpleQuote || \
     processSimpleQuote <span class="string">&quot;'&quot;</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
-    processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
     processChar
   <span class="keyword">done</span>
 }
 </code></pre>
 <h3>Lua を処理する。</h3>
+<ul>
+<li><a href="https://www.lua.org/manual/5.1/manual.html">Lua Reference Manual</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processLua {
-  <span class="keyword">local</span> key1=(<span class="keyword">for</span> <span class="keyword">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> switch <span class="keyword">case</span> <span class="keyword">function</span>)
+  <span class="keyword">local</span> key1=(and <span class="keyword">break</span> <span class="keyword">do</span> <span class="keyword">else</span> elseif <span class="keyword">end</span> false <span class="keyword">for</span> <span class="keyword">function</span> <span class="keyword">if</span> <span class="keyword">in</span> <span class="keyword">local</span> nil \
+    not or <span class="keyword">repeat</span> <span class="keyword">return</span> <span class="keyword">then</span> true <span class="keyword">until</span> <span class="keyword">while</span>)
   <span class="keyword">local</span> key2=(<span class="keyword2">print</span>)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
     processOutput <span class="string">'--&amp;gt;'</span> || \
@@ -648,19 +788,23 @@ Params:</p>
 }
 </code></pre>
 <h3>TypeScript を処理する。</h3>
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar">JavaScript Lexical grammar</a></p>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processTypeScript {
-  <span class="keyword">local</span> key1=(const <span class="keyword">for</span> <span class="keyword">return</span> <span class="keyword">if</span> <span class="keyword">else</span> <span class="keyword">while</span> static switch <span class="keyword">case</span> using \
-    namespace enum class struct <span class="keyword">function</span> interface extends type var let \
-    const typeof export import from as async await throw new try catch)
+  <span class="keyword">local</span> key1=( <span class="keyword">break</span> <span class="keyword">case</span> catch class const continue debugger default delete \
+    <span class="keyword">do</span> <span class="keyword">else</span> <span class="keyword">export</span> extends false finally <span class="keyword">for</span> <span class="keyword">function</span> <span class="keyword">if</span> import <span class="keyword">in</span> \
+    instanceof new null <span class="keyword">return</span> super switch this throw true try typeof var \
+    void <span class="keyword">while</span> with let static yield await enum implements interface package \
+    private protected public abstract boolean byte char double final <span class="keyword">float</span> \
+    goto int long native short synchronized throws transient volatile \
+    arguments as async eval from get of set)
   <span class="keyword">local</span> key2=(number string any void)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
-<span class="comment">#     if [[ -n $quote ]]; then</span>
-<span class="comment">#       processEscapeSequence || processQuoteClose || processChar</span>
-<span class="comment">#     else</span>
-<span class="comment">#       processOutput '//&amp;gt;' || processComment || processComment '//' || \</span>
-<span class="comment">#       processQuoteOpen '&amp;quot;' || processQuoteOpen &quot;'&quot; || \</span>
-<span class="comment">#       processQuoteOpen '`' || \</span>
+    processOutput <span class="string">'//&amp;gt;'</span> || \
+    processSimpleQuote || \
+    processSimpleQuote <span class="string">'&amp;quot;'</span> || \
+    processSimpleQuote <span class="string">'`'</span> || \
+    processOneLineComment <span class="string">'//'</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
@@ -675,13 +819,10 @@ Params:</p>
     namespace constexpr noexcept enum class struct)
   <span class="keyword">local</span> key2=(int void double size_t unsigned auto byte short )
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
-<span class="comment">#   rest=$1</span>
-<span class="comment">#   while [[ -n $rest ]]; do</span>
-<span class="comment">#     if [[ -n $quote ]]; then</span>
-<span class="comment">#       processEscapeSequence || processQuoteClose || processChar</span>
-<span class="comment">#     else</span>
-<span class="comment">#       processOutput '//&amp;gt;' || processComment || processComment '//' || \</span>
-<span class="comment">#       processQuoteOpen '&amp;quot;' || processQuoteOpen &quot;'&quot; || \</span>
+    processOutput <span class="string">'//&amp;gt;'</span> || \
+    processSimpleQuote || \
+    processSimpleQuote <span class="string">'&amp;quot;'</span> || \
+    processOneLineComment <span class="string">'//'</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
@@ -690,24 +831,44 @@ Params:</p>
 }
 </code></pre>
 <h3>SQL を処理する。</h3>
+<ul>
+<li><a href="https://learn.microsoft.com/ja-jp/sql/t-sql/language-elements/reserved-keywords-transact-sql?view=sql-server-ver17">SQL reserved keywords</a></li>
+</ul>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#==============================================================================</span>
 <span class="keyword">function</span> processSQL {
-  <span class="keyword">local</span> key1=(select)
+  <span class="keyword">local</span> key1=(ADD EXTERNAL PROCEDURE ALL FETCH PUBLIC ALTER FILE RAISERROR \
+    AND FILLFACTOR READ ANY FOR READTEXT AS FOREIGN RECONFIGURE ASC FREETEXT \
+    REFERENCES AUTHORIZATION FREETEXTTABLE REPLICATION BACKUP FROM RESTORE \
+    BEGIN FULL RESTRICT BETWEEN FUNCTION RETURN BREAK GOTO REVERT BROWSE \
+    GRANT REVOKE BULK GROUP RIGHT BY HAVING ROLLBACK CASCADE HOLDLOCK \
+    ROWCOUNT CASE IDENTITY ROWGUIDCOL CHECK IDENTITY_INSERT RULE CHECKPOINT \
+    IDENTITYCOL SAVE CLOSE IF SCHEMA CLUSTERED IN SECURITYAUDIT COALESCE \
+    INDEX SELECT COLLATE INNER SEMANTICKEYPHRASETABLE COLUMN INSERT \
+    SEMANTICSIMILARITYDETAILSTABLE COMMIT INTERSECT SEMANTICSIMILARITYTABLE \
+    COMPUTE INTO SESSION_USER CONSTRAINT IS SET CONTAINS JOIN SETUSER \
+    CONTAINSTABLE KEY SHUTDOWN CONTINUE KILL SOME CONVERT LEFT STATISTICS \
+    CREATE LIKE SYSTEM_USER CROSS LINENO TABLE CURRENT LOAD TABLESAMPLE \
+    CURRENT_DATE MERGE TEXTSIZE CURRENT_TIME NATIONAL THEN CURRENT_TIMESTAMP \
+    NOCHECK TO CURRENT_USER NONCLUSTERED TOP CURSOR NOT TRAN DATABASE NULL \
+    TRANSACTION DBCC NULLIF TRIGGER DEALLOCATE OF TRUNCATE DECLARE OFF \
+    TRY_CONVERT DEFAULT OFFSETS TSEQUAL DELETE ON UNION DENY OPEN UNIQUE DESC \
+    OPENDATASOURCE UNPIVOT DISK OPENQUERY UPDATE DISTINCT OPENROWSET \
+    UPDATETEXT DISTRIBUTED OPENXML USE DOUBLE OPTION USER DROP OR VALUES DUMP \
+    ORDER VARYING ELSE OUTER VIEW END OVER WAITFOR ERRLVL PERCENT WHEN ESCAPE \
+    PIVOT WHERE EXCEPT PLAN WHILE EXEC PRECISION WITH EXECUTE PRIMARY EXISTS \
+    PRINT WRITETEXT EXIT PROC)
   <span class="keyword">local</span> key2=(.<span class="keyword2">exit</span> .help .<span class="keyword2">print</span> .databases .tables .schema .fullshcema .output .once .mode .header .nullvalue)
   <span class="keyword">while</span> feedBuffer; <span class="keyword">do</span>
-<span class="comment">#   while [[ -n $rest ]]; do</span>
-<span class="comment">#     if [[ -n $quote ]]; then</span>
-<span class="comment">#       processEscapeSequence || processQuoteClose || processChar</span>
-<span class="comment">#     else</span>
-<span class="comment">#       processOutput '--&amp;gt;' || processComment '--' || \</span>
-<span class="comment">#       processQuoteOpen '&amp;quot;' || processQuoteOpen &quot;'&quot; || \</span>
+    processOutput <span class="string">'--&amp;gt;'</span> || \
+    processSimpleQuote || \
+    processSimpleQuote <span class="string">'&amp;quot;'</span> || \
+    processOneLineComment <span class="string">'--'</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key1}</span> || \
     processKeywords <span class="variable">${(j&lt;|&gt;)key2}</span> <span class="string">'keyword2'</span> || \
     processWord || \
     processChar
   <span class="keyword">done</span>
 }
-<span class="comment">#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++</span>
 </code></pre>
 <h2>code要素を処理する。</h2>
 <ul>
@@ -753,8 +914,8 @@ Params:</p>
 <p>cmark-gfmの出力がここに来る。</p>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment">#------------------------------------------------------------------------------</span>
 <span class="keyword">function</span> processBody {
-  <span class="keyword">local</span> language rest pre tag
-  <span class="keyword">local</span> -a code
+  <span class="keyword">local</span> language pre tag rest
+  <span class="keyword">local</span> -a code <span class="comment"># コード行を貯める。</span>
   <span class="keyword">while</span> IFS= read -r rest; <span class="keyword">do</span>
     <span class="keyword">while</span> [[ -n <span class="variable">$rest</span> ]]; <span class="keyword">do</span>
       <span class="comment"># タグとそれ以外に分離する。</span>
@@ -786,7 +947,6 @@ Params:</p>
 }
 </code></pre>
 <h2>MAIN PROGRAM</h2>
-<p>############################################################################</p>
 <h3>オプションのパース</h3>
 <pre><div class="language-type">sh</div><code class="language-sh"><span class="comment"># オプションをパースする。</span>
 <span class="keyword">while</span> getopts o:t:b:h OPT; <span class="keyword">do</span>

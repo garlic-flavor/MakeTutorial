@@ -7,6 +7,7 @@
 ##
 ## ## 動機
 ## - MacOSでMarkdownを開くデフォルトアプリをXCodeから変えられない。
+##   そしてXCodeは起動が遅い。
 ## - cmark-gfmの出力はコードのシンタックスハイライトがないので、
 ##   そういうものを付ける。
 ## - とりあえずHTML生成に対応しておけば何かいいことがあるかも知れない。
@@ -55,6 +56,9 @@ function writeHeader {
         h3 {
           border-left: 10px solid lightgray;
           padding-left: 10px
+        }
+        em {
+          color: red;
         }
         pre:has(code) {
           border-style: solid;
@@ -137,9 +141,11 @@ typeset -g buf # グローバル変数で使いまわしてるので注意
 
 ## ### バッファが空なら埋める。
 ## もしバッファが空なら、改行を出力し、バッファに読み込む。
+##
 ## Params:
 ## - -n: 改行を挿入しない。
-## Returns:
+##
+## Return:
 ## - 読み込めるものがなければ1を返す。
 #------------------------------------------------------------------------------
 function feedBuffer {
@@ -179,25 +185,38 @@ function processChar {
 ## Params:
 ## - $1 : テストする文字列
 ## - $2 : もし真だったら先にこれも出力する。
+## - $3 : もし真だったら後にこれも出力する。
+##
+## Return:
+## - $1で始まっていなけれは1を返す。
 #------------------------------------------------------------------------------
 function processIf {
   if [[ $buf != $1* ]]; then return 1; fi
   #               ┗後ろに任意の文字が続いていても良い
   print -rn - $2
   processChar ${#1}
+  print -rn - $3
 }
 
 ## ### <span>要素を開始する。
+## Params:
+## - $1 : テストする文字列
+##
+## Return:
+## - $1で始まっていなければ1を返す。
 #------------------------------------------------------------------------------
 function processStartSpanIf {
-  if ! processIf $1 "<span class=\"$2\">"; then return 1; fi
+  processIf $1 "<span class=\"$2\">"
+  return $?
 }
 
 ## ### </span>
+## Params:
+## - $1 : テストする文字列。
 #------------------------------------------------------------------------------
 function processEndSpanIf {
-  if ! processIf $1; then return 1; fi
-  print -rn "</span>"
+  processIf $1 '' '</span>'
+  return $?
 }
 ## ### 正規表現にマッチしたら処理する。
 ## Params:
@@ -215,28 +234,33 @@ function processMatch {
 }
 
 ## ### 文字実体参照を処理する。
+## Return:
+## - 文字実体参照でなければ1を返す。
 #------------------------------------------------------------------------------
 function processEntity {
   processMatch "^&(amp|quot|lt|gt);"
   return $?
 }
-function
 
 ## ### 一行コメントを処理する。
 ## Params:
 ## - $1 : 一行コメントを開始するパターン。初期値は'#'
 ## - $2 : コメントはspan要素で出力される。その際のclassを指定する。
-##        初期値は"comment"
+##        初期値は`comment`
+##
+## Return:
+## - コメント行でなければ1を返す。
 #------------------------------------------------------------------------------
 function processOneLineComment {
   local header=${1:-'#'} class=${2:-comment}
   if ! processIf $header "<span class=\"$class\">"; then return 1; fi
-  print -rn - "$buf</span>"
+  print -rn - $buf"</span>"
   buf=
 }
 
-
 ## ### 最も単純なエスケープシーケンスを処理する。
+## Return:
+## - バックスラッシュでなければ1を返す。
 #------------------------------------------------------------------------------
 function processSimpleEscapeSequence {
   if ! processIf "\\"; then return 1; fi
@@ -244,6 +268,13 @@ function processSimpleEscapeSequence {
 }
 
 ## ### シンプルな文字列を処理する。
+## Params:
+## - $1 : クォート文字。ダブルクォートは文字実体参照により`&quot;`になっている
+##        ので注意。
+## - $2 : span要素のclass属性を指定する。
+##        初期値は`string`。
+## Return:
+## - クォートで始まっていなければ1を返す。
 #------------------------------------------------------------------------------
 function processSimpleQuote {
   local q=${1:-'&quot;'} class=${2:-string}
@@ -254,11 +285,13 @@ function processSimpleQuote {
   done
 }
 
-
 ## ### 一単語処理する。
 ## Params:
 ## - $1 : 単語を構成する一文字にマッチする正規表現。
-##        初期値は"[a-zA-Z0-9_]"
+##        初期値は`[a-zA-Z0-9_]`
+##
+## Return:
+## - 先頭文字が$1に含まれなければ1を返す。
 #------------------------------------------------------------------------------
 function processWord {
   local r=${1:-'[a-zA-Z0-9_]'}
@@ -270,6 +303,8 @@ function processWord {
 ## Params:
 ## - $1 : キーワードを"|"で繋いだ文字列。
 ## - $2 : キーワードを括るspan要素のclass属性。初期値は"keyword"。
+## Return:
+## - キーワードでなければ1を返す。
 #------------------------------------------------------------------------------
 function processKeywords {
   local keys=$1 class=${2:-keyword}
@@ -278,9 +313,13 @@ function processKeywords {
 }
 
 ## ### 出力行を処理する。
+## 行頭は1行コメントなので先にこちらを処理しないとヒットしない。
 ## Params:
 ## - $1 : 出力行の開始パターンを指定する。初期値は"#>"
 ## - $2 : 出力行が括られるspan要素のclass属性。初期値は"output"。
+##
+## Return:
+## - 出力行でなければ1を返す。
 #------------------------------------------------------------------------------
 function processOutput {
   local header=${1:-'#&gt;'} class=${2:-output}
@@ -290,13 +329,15 @@ function processOutput {
 }
 
 ## ## 個別の言語の処理
-#//////////////////////////////////////////////////////////////////////////////
+#//////////////////////////////////////////////////////////////////////////hide
 
 ## ### Shell Script を処理する。
+## - [zsh reserved words](https://roel.rs/cgi-bin/info2www?(zsh)Reserved+Words)
 #==============================================================================
 function processSh {
-  local key1=(function if then elif else fi local while do done for in \
-    case esac typeset setopt unsetopt return break)
+  local key1=(do done esac then elif else fi for case if while function \
+    repeat time until select coproc nocorrect foreach end declare export \
+    float integer local readonly typeset then in setopt unsetopt return break)
   local key2=(echo print printf exit)
   while feedBuffer; do
     processOutput || \
@@ -316,6 +357,9 @@ function processSh {
 ## Params:
 ## - $1 : クォート文字列。初期値は"'"。
 ## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
+##
+## Return:
+## - クォートで始まらなければ1を返す。
 #------------------------------------------------------------------------------
 function processSingleQuoteOfSh {
   local q=${1:-"'"} class=${2:-string}
@@ -328,9 +372,13 @@ function processSingleQuoteOfSh {
 }
 
 ## ### 文字列を開始する。
+## 内部で変数参照を処理する。
 ## Params:
 ## - $1 : クォート文字列。初期値は"&quot;"。
 ## - $2 : 文字列を括るspan要素のクラス属性を指定する。初期値は"string"。
+##
+## Return:
+## - クォートで始まらなければ1を返す。
 #------------------------------------------------------------------------------
 function processDoubleQuoteOfSh {
   local q=${1:-"&quot;"} class=${2:-string}
@@ -346,11 +394,15 @@ function processDoubleQuoteOfSh {
 ## zshの変数の参照の様なものを処理する。
 ## Params:
 ## - $1 : 処理結果が格納されるspan要素のclass属性。初期値は"variable"。
+##
+## Return:
+## - `$`で始まらなければ1を返す。
+## - `$"`に対しても1を返す(正規表現の末尾を表す場合に現れる)。
 #------------------------------------------------------------------------------
 function processVariableReferenceOfSh {
   local class=${1:-variable}
 
-  # &" は変数ではない。
+  # $" は変数ではない。
   if [[ $buf = \$\&quot\;* ]]; then return 1; fi
   if ! processStartSpanIf '$' $class; then return 1; fi
 
@@ -362,6 +414,8 @@ function processVariableReferenceOfSh {
 }
 
 ## ### 対応する括弧を処理する。
+## Return:
+## - 括弧ではない場合に1を返す。
 #------------------------------------------------------------------------------
 function processBalancedBracketOfSh {
   processBalancedOfSh || \
@@ -379,13 +433,15 @@ function processShTokenInVariableReference {
   processSimpleEscapeSequence || \
   processWord || \
   processChar
-  return $?
 }
 
 ## ### 対応する括弧を処理する。
 ## Params:
 ## - $1 : 開き括弧。初期値は'{'
 ## - $2 : 閉じ括弧。初期値は'}'
+##
+## Return:
+## - 開き括弧でない場合に1を返す。
 #------------------------------------------------------------------------------
 function processBalancedOfSh {
   local open=${1:-\{} close=${2:-\}}
@@ -401,18 +457,35 @@ function processBalancedOfSh {
 }
 
 ## ### Tcl を処理する。
+## - [Tcl Commands](https://www.tcl-lang.org/man/tcl8.6/TclCmd/contents.h)
 #==============================================================================
 function processTcl {
-  local key1=(proc if then elseif else for set switch default while upvar \
-    global package namespace eval provide export ensemble foreach)
-  local key2=(puts return incr array require expr dict wm grid)
+  local key1=(after errorInfo load pwd tcl_rcFileName append eval lrange \
+    re_syntax tcl_startOfNextWord apply exec lrepeat read \
+    tcl_startOfPreviousWord argc exit lreplace refchan tcl_traceCompile \
+    argv expr lreverse regexp tcl_traceExec argv0 fblocked lsearch registry \
+    tcl_version array fconfigure lset regsub tcl_wordBreakAfter auto_execok \
+    fcopy lsort rename tcl_wordBreakBefore auto_import file mathfunc return \
+    tcl_wordchars auto_load fileevent mathop safe tcltest auto_mkindex \
+    filename memory scan tell auto_path flush msgcat seek throw auto_qualify \
+    for my self time auto_reset foreach namespace set timerate bgerror format \
+    next socket tm binary gets nextto source trace break glob oo::class split \
+    transchan catch global oo::copy string try cd history oo::define subst \
+    unknown chan http oo::objdefine switch unload clock if oo::object \
+    tailcall unset close incr oo::Slot Tcl update concat info open \
+    tcl::prefix uplevel continue interp package tcl_endOfWord upvar coroutine \
+    join parray tcl_findLibrary variable dde lappend pid tcl_interactive \
+    vwait dict lassign pkg::create tcl_library while encoding lindex \
+    pkg_mkIndex tcl_nonwordchars yield env linsert platform tcl_patchLevel \
+    yieldto eof list platform::shell tcl_pkgPath zlib error llength proc \
+    tcl_platform errorCode lmap puts tcl_precision)
+
   while feedBuffer; do
     processOutput || \
     processOneLineComment || \
     processVariableReferenceOfTcl || \
     processDoubleQuoteOfTcl || \
     processKeywords ${(j<|>)key1} || \
-    processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
     processChar
   done
@@ -440,7 +513,8 @@ function processBalancedOfTcl {
       break
     else
       processBalancedOfTcl $open $close || \
-      processTclToken
+      processVariableReferenceOfTcl || \
+      processChar
     fi
   done
   print -rn $4
@@ -455,46 +529,66 @@ function processVariableReferenceOfTcl {
 }
 
 ## ### AppleScript を処理する。
+## - [AppleScript Keywords](https://developer.apple.com/library/archive/documentation/AppleScript/Conceptual/AppleScriptLangGuide/reference/ASLR_keywords.html)
 #==============================================================================
 function processAppleScript {
-  local key1=(on end do set to of)
-  local key2=(try return)
+  local key1=(about above after against and apart from around as aside at \
+    back before beginning behind below beneath beside between but by \
+    considering contains contain continue copy div does eighth else end \
+    equals equal error every exit false fifth first for fourth from front get \
+    given global if ignoring in instead of into is its it last local me \
+    middle mod my ninth not on onto or out over property prop put \
+    reference ref repeat return returning script second set seventh since \
+    sixth some tell tenth that the then third thru through timeout times to \
+    transaction true try until use where while whose with without)
+
   while feedBuffer; do
     processSimpleQuote || \
     processOneLineComment '--' || \
     processKeywords ${(j<|>)key1} || \
-    processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
     processChar
   done
 }
 
 ## ### C/C++ を処理する。
+## - [C++ Keywords](https://learn.microsoft.com/en-us/cpp/cpp/keywords-cpp?view=msvc-170)
 #==============================================================================
 function processC {
-  local key1=(const for return if else while static switch case using \
-    namespace constexpr noexcept enum class struct)
-  local key2=(int void double size_t unsigned auto byte short )
+  local key1=(alignas alignof and and_eq asm auto bitand bitor bool break \
+    case catch char char8_t char16_t char32_t class compl concept const \
+    const_cast consteval constexpr constinit continue co_await co_return \
+    co_yield decltype default delete do double dynamic_cast else enum \
+    explicit export extern false float for friend goto if inline int long \
+    mutable namespace new noexcept not not_eq nullptr operator or or_eq \
+    private protected public register reinterpret_cast requires return short \
+    signed sizeof static static_assert static_cast struct switch template \
+    this thread_local throw true try typedef typeid typename union unsigned \
+    declaration using directive virtual void volatile wchar_t while xor \
+    xor_eq)
 
   while feedBuffer; do
     processSimpleQuote || \
     processSimpleQuote "'" || \
+    processOutput '//&gt;' || \
     processOneLineComment || \
     processOneLineComment '//' || \
-    processOutput '//&gt;' || \
     processKeywords ${(j<|>)key1} || \
-    processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
     processChar
   done
 }
 
 ## ### Java を処理する。
+## - [Java Language Keywords](https://docs.oracle.com/javase/tutorial/java/nutsandbolts/_keywords.html)
 #==============================================================================
 function processJava {
-  local key1=(public const for return if else while static case  \
-    enum class struct package module requires exports yield)
-  local key2=(String void byte short int long float double boolean char)
+  local key1=( abstract continue for new switch assert default goto package \
+    synchronized boolean do if private this break double implements protected \
+    throw byte else import public throws case enum instanceof return \
+    transient catch extends int short try char final interface static void \
+    class finally long strictfp volatile const float native super while)
+  local key2=(String)
   while feedBuffer; do
     processSimpleQuote || \
     processSimpleQuote "'" || \
@@ -510,13 +604,22 @@ function processJava {
 }
 
 ## ### Fortran を処理する。
+## - [Fortran Keywords](https://fortranwiki.org/fortran/show/Keywords)
 #==============================================================================
 function processFortran {
-  local key1=(for return if else while switch case use \
-    namespace constexpr noexcept enum class struct end program \
-    module contains function implicit none subroutine data type)
-  local key2=(character allocatable integer real complex dimension \
-    double precision)
+  local key1=(assign backspace block data call close common continue data \
+    dimension do else else if end endfile endif entry equivalence external \
+    format function goto if implicit inquire intrinsic open parameter pause \
+    print program read return rewind rewrite save stop subroutine then write \
+    allocatable allocate case contains cycle deallocate elsewhere exit \
+    include interface intent module namelist nullify only operator optional \
+    pointer private procedure public recursive result select sequence target \
+    use while where elemental forall pure abstract associate asynchronous \
+    bind class deferred enum enumerator extends final flush generic import \
+    non_overridable nopass pass protected value volatile wait block \
+    codimension do concurrent contiguous critical error stop submodule sync \
+    all sync images sync memory lock unlock impure select rank non_recursive \
+    import)
 
   while feedBuffer; do
     processOutput '!&gt;' || \
@@ -525,16 +628,17 @@ function processFortran {
     processSimpleQuote || \
     processSimpleQuote "'" || \
     processKeywords ${(j<|>)key1} || \
-    processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
     processChar
   done
 }
 
 ## ### Lua を処理する。
+## - [Lua Reference Manual](https://www.lua.org/manual/5.1/manual.html)
 #==============================================================================
 function processLua {
-  local key1=(for return if else while switch case function)
+  local key1=(and break do else elseif end false for function if in local nil \
+    not or repeat return then true until while)
   local key2=(print)
 
   while feedBuffer; do
@@ -550,19 +654,24 @@ function processLua {
 
 
 ## ### TypeScript を処理する。
+## [JavaScript Lexical grammar](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar)
 #==============================================================================
 function processTypeScript {
-  local key1=(const for return if else while static switch case using \
-    namespace enum class struct function interface extends type var let \
-    const typeof export import from as async await throw new try catch)
+  local key1=( break case catch class const continue debugger default delete \
+    do else export extends false finally for function if import in \
+    instanceof new null return super switch this throw true try typeof var \
+    void while with let static yield await enum implements interface package \
+    private protected public abstract boolean byte char double final float \
+    goto int long native short synchronized throws transient volatile \
+    arguments as async eval from get of set)
+
   local key2=(number string any void)
   while feedBuffer; do
-#     if [[ -n $quote ]]; then
-#       processEscapeSequence || processQuoteClose || processChar
-#     else
-#       processOutput '//&gt;' || processComment || processComment '//' || \
-#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
-#       processQuoteOpen '`' || \
+    processOutput '//&gt;' || \
+    processSimpleQuote || \
+    processSimpleQuote '&quot;' || \
+    processSimpleQuote '`' || \
+    processOneLineComment '//' || \
     processKeywords ${(j<|>)key1} || \
     processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
@@ -577,13 +686,10 @@ function processJSON {
     namespace constexpr noexcept enum class struct)
   local key2=(int void double size_t unsigned auto byte short )
   while feedBuffer; do
-#   rest=$1
-#   while [[ -n $rest ]]; do
-#     if [[ -n $quote ]]; then
-#       processEscapeSequence || processQuoteClose || processChar
-#     else
-#       processOutput '//&gt;' || processComment || processComment '//' || \
-#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+    processOutput '//&gt;' || \
+    processSimpleQuote || \
+    processSimpleQuote '&quot;' || \
+    processOneLineComment '//' || \
     processKeywords ${(j<|>)key1} || \
     processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
@@ -592,17 +698,36 @@ function processJSON {
 }
 
 ## ### SQL を処理する。
+## - [SQL reserved keywords](https://learn.microsoft.com/ja-jp/sql/t-sql/language-elements/reserved-keywords-transact-sql?view=sql-server-ver17)
 #==============================================================================
 function processSQL {
-  local key1=(select)
+  local key1=(ADD EXTERNAL PROCEDURE ALL FETCH PUBLIC ALTER FILE RAISERROR \
+    AND FILLFACTOR READ ANY FOR READTEXT AS FOREIGN RECONFIGURE ASC FREETEXT \
+    REFERENCES AUTHORIZATION FREETEXTTABLE REPLICATION BACKUP FROM RESTORE \
+    BEGIN FULL RESTRICT BETWEEN FUNCTION RETURN BREAK GOTO REVERT BROWSE \
+    GRANT REVOKE BULK GROUP RIGHT BY HAVING ROLLBACK CASCADE HOLDLOCK \
+    ROWCOUNT CASE IDENTITY ROWGUIDCOL CHECK IDENTITY_INSERT RULE CHECKPOINT \
+    IDENTITYCOL SAVE CLOSE IF SCHEMA CLUSTERED IN SECURITYAUDIT COALESCE \
+    INDEX SELECT COLLATE INNER SEMANTICKEYPHRASETABLE COLUMN INSERT \
+    SEMANTICSIMILARITYDETAILSTABLE COMMIT INTERSECT SEMANTICSIMILARITYTABLE \
+    COMPUTE INTO SESSION_USER CONSTRAINT IS SET CONTAINS JOIN SETUSER \
+    CONTAINSTABLE KEY SHUTDOWN CONTINUE KILL SOME CONVERT LEFT STATISTICS \
+    CREATE LIKE SYSTEM_USER CROSS LINENO TABLE CURRENT LOAD TABLESAMPLE \
+    CURRENT_DATE MERGE TEXTSIZE CURRENT_TIME NATIONAL THEN CURRENT_TIMESTAMP \
+    NOCHECK TO CURRENT_USER NONCLUSTERED TOP CURSOR NOT TRAN DATABASE NULL \
+    TRANSACTION DBCC NULLIF TRIGGER DEALLOCATE OF TRUNCATE DECLARE OFF \
+    TRY_CONVERT DEFAULT OFFSETS TSEQUAL DELETE ON UNION DENY OPEN UNIQUE DESC \
+    OPENDATASOURCE UNPIVOT DISK OPENQUERY UPDATE DISTINCT OPENROWSET \
+    UPDATETEXT DISTRIBUTED OPENXML USE DOUBLE OPTION USER DROP OR VALUES DUMP \
+    ORDER VARYING ELSE OUTER VIEW END OVER WAITFOR ERRLVL PERCENT WHEN ESCAPE \
+    PIVOT WHERE EXCEPT PLAN WHILE EXEC PRECISION WITH EXECUTE PRIMARY EXISTS \
+    PRINT WRITETEXT EXIT PROC)
   local key2=(.exit .help .print .databases .tables .schema .fullshcema .output .once .mode .header .nullvalue)
   while feedBuffer; do
-#   while [[ -n $rest ]]; do
-#     if [[ -n $quote ]]; then
-#       processEscapeSequence || processQuoteClose || processChar
-#     else
-#       processOutput '--&gt;' || processComment '--' || \
-#       processQuoteOpen '&quot;' || processQuoteOpen "'" || \
+    processOutput '--&gt;' || \
+    processSimpleQuote || \
+    processSimpleQuote '&quot;' || \
+    processOneLineComment '--' || \
     processKeywords ${(j<|>)key1} || \
     processKeywords ${(j<|>)key2} 'keyword2' || \
     processWord || \
@@ -610,7 +735,7 @@ function processSQL {
   done
 }
 
-#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#/////////////////////////////////////////////////////////////////////////hide
 
 ## ## code要素を処理する。
 ## - それぞれの言語に処理を分配する。
@@ -654,8 +779,8 @@ function processCode {
 ## cmark-gfmの出力がここに来る。
 #------------------------------------------------------------------------------
 function processBody {
-  local language rest pre tag
-  local -a code
+  local language pre tag rest
+  local -a code # コード行を貯める。
 
   while IFS= read -r rest; do
     while [[ -n $rest ]]; do
@@ -689,7 +814,7 @@ function processBody {
 }
 
 ## ## MAIN PROGRAM
-##############################################################################
+###########################################################################hide
 ## ### オプションのパース
 # オプションをパースする。
 while getopts o:t:b:h OPT; do
